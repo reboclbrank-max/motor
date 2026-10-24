@@ -47,6 +47,29 @@ jobs:
           REPO_MEMORIA: ${{ secrets.REPO_MEMORIA }}
         run: python3 sincronizar.py baixar
 
+      - name: Diagnóstico do GitHub Models (por que falhou)
+        env:
+          PAT_MEMORIA: ${{ secrets.PAT_MEMORIA }}
+        run: |
+          python3 - <<'EOF'
+          import json, os, urllib.request, urllib.error
+          tok = os.environ.get("PAT_MEMORIA", "")
+          for base in ("https://models.github.ai/inference", "https://models.inference.ai.azure.com"):
+              for modelo in ("openai/gpt-4o-mini", "gpt-4o-mini"):
+                  corpo = json.dumps({"model": modelo, "messages": [{"role": "user", "content": "3+4*2?"}], "max_tokens": 20}).encode()
+                  req = urllib.request.Request(base + "/chat/completions", data=corpo, method="POST")
+                  req.add_header("Content-Type", "application/json")
+                  req.add_header("Authorization", "Bearer " + tok)
+                  try:
+                      with urllib.request.urlopen(req, timeout=30) as r:
+                          print(f"{base} [{modelo}] -> {r.status} | {r.read()[:200]}")
+                  except urllib.error.HTTPError as e:
+                      print(f"{base} [{modelo}] -> HTTP {e.code} | {e.read()[:300]}")
+                  except Exception as e:
+                      print(f"{base} [{modelo}] -> {type(e).__name__}: {str(e)[:120]}")
+          print("token presente no ambiente:", bool(tok), "| tamanho:", len(tok))
+          EOF
+
       - name: Desafiar cada motor
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_MEMORIA }}
