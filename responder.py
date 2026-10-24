@@ -229,6 +229,37 @@ def cacar_cmd():
         return f"⚠️ Não consegui disparar a caçada agora: `{str(e)[:120]}`"
 
 
+def motores_cmd():
+    """Mostra quais motores REALMENTE pensam, medidos pelo desafio — não por HTTP 200."""
+    diag = C.ler_diagnostico()
+    estados = diag.get("provedores", {})
+    if not estados:
+        return ("Nenhum teste ainda. Rode o workflow **motores** "
+                "(Actions → *motores (teste de verdade)* → Run workflow) e eu mostro aqui.")
+    ultimo = diag.get("ultimo_teste", {})
+    vivos = [(k, v) for k, v in estados.items() if v.get("cerebro")]
+    mortos = [(k, v) for k, v in estados.items() if v.get("cerebro") is False]
+    linhas = ["**Motores — medidos pelo desafio** (conta verificável, não HTTP 200)", ""]
+    if ultimo.get("quando"):
+        linhas.append(f"Último teste: {str(ultimo['quando'])[:16].replace('T', ' ')}")
+        linhas.append("")
+    linhas.append(f"**Pensam: {len(vivos)}**")
+    for k, v in sorted(vivos, key=lambda kv: kv[1].get("ms_ultimo") or 99999)[:10]:
+        acertos = v.get("acertos_cerebro")
+        testes = v.get("testes_cerebro")
+        extra = f" · cérebro {acertos}/{testes}" if acertos is not None else ""
+        linhas.append(f"- `{k}` — {v.get('ms_ultimo', '?')} ms{extra}")
+    if mortos:
+        linhas.append("")
+        linhas.append(f"**Não pensam: {len(mortos)}**")
+        for k, v in mortos[:10]:
+            linhas.append(f"- `{k}` — {str(v.get('erro') or 'falhou')[:60]}")
+    linhas.append("")
+    linhas.append("_Um motor só entra aqui se acertar a conta do desafio. Endpoint que devolve "
+                  "texto fixo é reprovado, mesmo respondendo 200._")
+    return "\n".join(linhas)
+
+
 def pagos_cmd():
     """Mapa dos motores pagos (401) — o que uma chave do dono destrava."""
     try:
@@ -621,6 +652,7 @@ def principal():
              lambda _a: janelas_cmd()),
             (r"^/?(?:cacar|caçar)\s*:?\s*$", "🏹", "caçada de motores", lambda _a: cacar_cmd()),
             (r"^/?(?:pagos|pagas)\s*:?\s*$", "💳", "mapa de pagos", lambda _a: pagos_cmd()),
+            (r"^/?(?:motores|motor|engines)\s*:?\s*$", "⚙️", "motores", lambda _a: motores_cmd()),
             (r"^/?(?:melhorias)\s*:?\s*$", "", "melhorias", lambda _a: C.ferramenta_melhorias()),
             (r"^/?(?:panorama|resumir)\s*:?\s*$", "", "panorama",
              lambda _a: C.resumir_memoria() if "resumir" in texto.lower() else C.ferramenta_panorama()),

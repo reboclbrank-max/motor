@@ -240,5 +240,28 @@ fonte_resp = open(os.path.join(RAIZ, "responder.py"), encoding="utf-8").read()
 ok("o responder usa a análise antes de chamar o motor",
    "pede_decisao(texto)" in fonte_resp and fonte_resp.index("pede_decisao(texto)") < fonte_resp.index("C.pensar_bem("))
 
+# 13. o teste de motor tem que PROVAR que ele pensa
+import comum as C_
+pergunta, esperado, etiqueta = C_.desafio_motor()
+ok("o desafio tem resposta verificável", isinstance(esperado, int) and esperado > 0)
+ok("a resposta certa passa", C_.confere_desafio(str(esperado), esperado, etiqueta, pergunta)[0])
+ok("texto fixo 'OK' é reprovado", not C_.confere_desafio("OK", esperado, etiqueta, pergunta)[0])
+ok("eco do prompt é reprovado", not C_.confere_desafio(pergunta, esperado, etiqueta, pergunta)[0])
+ok("repetir a etiqueta é reprovado",
+   not C_.confere_desafio("codigo " + etiqueta, esperado, etiqueta, pergunta)[0])
+ok("resultado errado é reprovado", not C_.confere_desafio(str(esperado + 1), esperado, etiqueta, pergunta)[0])
+ok("resposta vazia é reprovada", not C_.confere_desafio("", esperado, etiqueta, pergunta)[0])
+ok("o desafio muda a cada chamada (não dá para decorar)",
+   len({C_.desafio_motor()[1] for _ in range(6)}) > 1)
+fonte_comum = open(os.path.join(RAIZ, "comum.py"), encoding="utf-8").read()
+ok("o teste de saúde não usa mais o 'responda OK'",
+   'content": "Responda apenas: OK"' not in fonte_comum and "provar_motor(p)" in fonte_comum)
+ok("motor sem cérebro sai da frente da fila", "sem_cerebro" in fonte_comum)
+fonte_resp = open(os.path.join(RAIZ, "responder.py"), encoding="utf-8").read()
+ok("existe o comando !motores", "def motores_cmd" in fonte_resp and "motores|motor" in fonte_resp)
+ok("o teste é feito no runner, não no meu ambiente",
+   os.path.exists(os.path.join(RAIZ, "testar-motores.py"))
+   and os.path.exists(os.path.join(RAIZ, ".github", "workflows", "motores.yml")))
+
 print("\n%d/%d verificações do estado da casa passaram" % (certos, certos + falhas))
 raise SystemExit(1 if falhas else 0)

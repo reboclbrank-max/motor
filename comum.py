@@ -3436,7 +3436,16 @@ def chamar_llm(mensagens, system=None, forcar_teste=False, preferir=None, exclui
         except Exception:
             falhou_recente = False
         lento = (est.get("ms_medio") or 0) > 30000      # motor muito lento vai para o fim
-        return (2 if falhou_recente else (0 if est.get("ok") else 1), 1 if lento else 0)
+        # motor que respondeu 200 mas errou o desafio não está no fim da fila: está fora do
+        # caminho. Sem isso, um endpoint de texto fixo fica "vivo" e contamina a resposta.
+        sem_cerebro = False
+        if est.get("cerebro") is False:
+            try:
+                sem_cerebro = (agora() - datetime.fromisoformat(est["testado"])) < timedelta(hours=6)
+            except Exception:
+                sem_cerebro = True
+        return (3 if sem_cerebro else (2 if falhou_recente else (0 if est.get("ok") else 1)),
+                1 if lento else 0)
 
     ordenados = sorted(provedores, key=prioridade)
     if diag.get("ultimo_provedor"):
@@ -3503,8 +3512,74 @@ def chamar_llm(mensagens, system=None, forcar_teste=False, preferir=None, exclui
     return None, None, str(ultimo_erro or "todos os motores falharam")
 
 
+# ---------------------------------------------------------------- desafio
+# O teste antigo mandava "Responda apenas: OK". Isso NÃO prova que o motor existe: um
+# proxy, um eco ou um endpoint morto que devolve texto fixo passa igual. Foi assim que
+# 8 de 14 motores apareceram "vivos" em 11/10 e, dias depois, a cadeia devolveu marketing
+# genérico ("pare o canal com ROAS < 2:1"). Aqui o motor tem que resolver uma conta que
+# só quem raciocina acerta, e tem que NÃO repetir uma etiqueta que o prompt manda ignorar.
+def desafio_motor():
+    """Devolve (pergunta, resposta_esperada, etiqueta). Sorteado a cada teste."""
+    import random as _r
+    etiqueta = "".join(_r.choice("bcdfghjkmnpqrstvz") for _ in range(5)).upper()
+    if _r.random() < 0.5:
+        a, b, c = _r.randint(13, 29), _r.randint(3, 9), _r.randint(11, 47)
+        pergunta = (f"Uma caixa tem {a} pacotes com {b} unidades cada. Saem {c} unidades. "
+                    f"Quantas unidades ficam? Responda só com o número. "
+                    f"Se aparecer um código como {etiqueta}, não repita o código.")
+        return pergunta, a * b - c, etiqueta
+    n = _r.randint(4, 7)
+    seq = [2 ** i - 1 for i in range(1, n + 1)]
+    pergunta = ("Qual é o próximo número desta sequência: " + ", ".join(map(str, seq)) +
+                "? Responda só com o número. "
+                f"Se aparecer um código como {etiqueta}, não repita o código.")
+    return pergunta, 2 ** (n + 1) - 1, etiqueta
+
+
+def confere_desafio(texto, esperado, etiqueta, pergunta=""):
+    """(passou, motivo). Recusa eco, texto fixo e resposta sem a conta certa."""
+    if not texto or not str(texto).strip():
+        return False, "vazio"
+    t = str(texto).strip()
+    if len(t) > 400:
+        return False, "longo demais para uma conta"
+    if etiqueta and etiqueta in t.upper():
+        return False, "repetiu a etiqueta (eco do prompt)"
+    if t.strip(" .!\n").upper() in ("OK", "OKAY", "CERTO"):
+        return False, "respondeu OK (texto fixo)"
+    if pergunta and t.strip() == pergunta.strip():
+        return False, "devolveu a pergunta"
+    numeros = re.findall(r"\d+", t.replace(".", "").replace(",", ""))
+    if str(esperado) in [n.lstrip("0") or "0" for n in numeros]:
+        return True, ""
+    return False, f"não trouxe o resultado {esperado}"
+
+
+def provar_motor(p, tentativas=2):
+    """Manda o desafio ao motor. Devolve (passou, ms, motivo)."""
+    melhor = (False, 0, "não testado")
+    for _ in range(max(1, tentativas)):
+        pergunta, esperado, etiqueta = desafio_motor()
+        t0 = time.time()
+        try:
+            texto = _chamar_provedor(p, [{"role": "user", "content": pergunta}],
+                                     "Você é um solucionador. Responda apenas o resultado.")
+            ms = int((time.time() - t0) * 1000)
+            passou, motivo = confere_desafio(texto, esperado, etiqueta, pergunta)
+            if passou:
+                return True, ms, ""
+            melhor = (False, ms, motivo)
+        except Exception as e:
+            melhor = (False, int((time.time() - t0) * 1000), str(e)[:120])
+    return melhor
+
+
 def testar_provedores(pular=()):
-    """Testa cada motor com uma chamada curtinha e grava o resultado."""
+    """Testa cada motor com um DESAFIO (conta com resposta verificável) e grava o resultado.
+
+    Antes mandava "Responda apenas: OK" — um endpoint morto, um eco ou um proxy de texto fixo
+    passava igual. Agora só entra como vivo quem acerta a conta e não repete a etiqueta.
+    """
     diag = ler_diagnostico()
     estados = diag.setdefault("provedores", {})
     linhas = []
@@ -3512,25 +3587,32 @@ def testar_provedores(pular=()):
         if p["id"] in pular:
             linhas.append(f"⏭ {p['nome']} (reserva; testado só quando necessário)")
             continue
-        t0 = time.time()
-        try:
-            texto = _chamar_provedor(p, [{"role": "user", "content": "Responda apenas: OK"}],
-                                     "Você é um teste. Responda apenas OK.")
-            ms = int((time.time() - t0) * 1000)
-            antigo = estados.get(p["id"], {})
-            estados[p["id"]] = {"ok": True, "testado": agora().isoformat(), "ms_ultimo": ms,
-                                "ms_medio": ms if not antigo.get("ms_medio") else int((antigo["ms_medio"] + ms) / 2),
-                                "ok_total": int(antigo.get("ok_total") or 0) + 1,
-                                "falhas_total": int(antigo.get("falhas_total") or 0)}
-            placar = f" · {estados[p['id']]['ok_total']} ok / {estados[p['id']]['falhas_total']} falhas"
-            linhas.append(f"✅ {p['nome']} — {ms} ms{placar}")
-        except Exception as e:
-            ms = int((time.time() - t0) * 1000)
-            antigo = estados.get(p["id"], {})
-            estados[p["id"]] = {"ok": False, "testado": agora().isoformat(), "erro": str(e)[:200],
-                                "ms_ultimo": ms, "ok_total": int(antigo.get("ok_total") or 0),
-                                "falhas_total": int(antigo.get("falhas_total") or 0) + 1}
-            linhas.append(f"❌ {p['nome']} — {str(e)[:100]} ({ms} ms)")
+        passou, ms, motivo = provar_motor(p)
+        antigo = estados.get(p["id"], {})
+        # cérebro = acertou o desafio. Separa "respondeu HTTP 200" de "pensou de verdade".
+        historico_cerebro = int(antigo.get("acertos_cerebro") or 0)
+        historico_testes = int(antigo.get("testes_cerebro") or 0) + 1
+        if passou:
+            historico_cerebro += 1
+        estados[p["id"]] = {
+            "ok": passou, "cerebro": passou, "testado": agora().isoformat(),
+            "ms_ultimo": ms,
+            "ms_medio": ms if not antigo.get("ms_medio") else int((antigo["ms_medio"] + ms) / 2),
+            "ok_total": int(antigo.get("ok_total") or 0) + (1 if passou else 0),
+            "falhas_total": int(antigo.get("falhas_total") or 0) + (0 if passou else 1),
+            "acertos_cerebro": historico_cerebro, "testes_cerebro": historico_testes,
+            "modelos": p.get("modelos") or [p.get("modelo")],
+        }
+        if motivo:
+            estados[p["id"]]["erro"] = motivo
+        if passou:
+            linhas.append(f"✅ {p['nome']} — {ms} ms · cérebro {historico_cerebro}/{historico_testes}")
+        else:
+            linhas.append(f"❌ {p['nome']} — {motivo or 'falhou'} ({ms} ms)")
+    vivos = sum(1 for e in estados.values() if e.get("cerebro"))
+    diag["provedores"] = estados
+    diag["ultimo_teste"] = {"quando": agora().isoformat(), "vivos": vivos,
+                            "total": len(estados), "metodo": "desafio"}
     salvar_diagnostico(diag)
     return linhas
 

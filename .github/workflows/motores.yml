@@ -1,0 +1,79 @@
+name: motores (teste de verdade)
+
+# Testa os motores com um DESAFIO — conta com resultado verificável e etiqueta anti-eco.
+#
+# POR QUE NÃO O TESTE ANTIGO: mandava "Responda apenas: OK", e qualquer endpoint que
+# devolva texto fixo passa nesse teste. Foi por isso que 8 de 14 motores apareceram
+# "vivos" em 11/10/2026 enquanto a cadeia devolvia marketing genérico.
+#
+# POR QUE RODA AQUI: testar do ambiente de desenvolvimento não serve. Lá o host
+# `models.github.ai` devolveu HTTP 200 com o corpo "OK" até para token inválido e caminho
+# inexistente — proxy de saída, não a API. Só o runner do GitHub tem internet real.
+#
+# O resultado entra em MEMORIA/saude-motores.json (privado). Nada é inventado: se nenhum
+# motor acertar o desafio, o arquivo diz zero.
+
+on:
+  workflow_dispatch:
+  # Uma vez por dia, cedo: se um motor morrer, o dia já começa sabendo.
+  schedule:
+    - cron: '0 6 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: motor-teste
+  cancel-in-progress: false
+
+jobs:
+  testar:
+    if: github.event_name == 'schedule' || github.actor == 'reboclbrank-max'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # Pinado por SHA (tag móvel comprometida rodaria com o PAT no ambiente).
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+
+      - name: Barreira offline (sem rede, sem segredo)
+        run: python3 teste-casa.py
+
+      - name: Baixar a memória do repositório privado
+        env:
+          PAT_MEMORIA: ${{ secrets.PAT_MEMORIA }}
+          REPO_MEMORIA: ${{ secrets.REPO_MEMORIA }}
+        run: python3 sincronizar.py baixar
+
+      - name: Desafiar cada motor
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_MEMORIA }}
+          PAT_MEMORIA: ${{ secrets.PAT_MEMORIA }}
+          REPO_CONVERSAS: ${{ secrets.REPO_MEMORIA }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          HUGGINGFACE_API_KEY: ${{ secrets.HUGGINGFACE_API_KEY }}
+          CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          REQUESTY_API_KEY: ${{ secrets.REQUESTY_API_KEY }}
+          ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
+          ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+          SAMBANOVA_API_KEY: ${{ secrets.SAMBANOVA_API_KEY }}
+          GLAMA_API_KEY: ${{ secrets.GLAMA_API_KEY }}
+          UPSTAGE_API_KEY: ${{ secrets.UPSTAGE_API_KEY }}
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          LLM7_API_KEY: ${{ secrets.LLM7_API_KEY }}
+          OPENAI_COMPAT_KEY: ${{ secrets.OPENAI_COMPAT_KEY }}
+          OPENAI_COMPAT_BASE: ${{ secrets.OPENAI_COMPAT_BASE }}
+          OPENAI_COMPAT_MODEL: ${{ secrets.OPENAI_COMPAT_MODEL }}
+        run: python3 testar-motores.py
+
+      - name: Devolver o resultado (memória)
+        if: always()
+        env:
+          PAT_MEMORIA: ${{ secrets.PAT_MEMORIA }}
+          REPO_MEMORIA: ${{ secrets.REPO_MEMORIA }}
+        run: python3 sincronizar.py subir
