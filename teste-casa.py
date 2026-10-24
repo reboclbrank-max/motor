@@ -208,5 +208,37 @@ ok("as ferramentas antigas continuam reconhecidas",
 ok("repositório das conversas pode ser apontado (motor público)",
    "REPO_CONVERSAS" in open(os.path.join(RAIZ, "comum.py"), encoding="utf-8").read() or True)
 
+# 12. análise de decisão: sai dos números, não de marketing genérico
+DES_DECISAO = """## 24/10/2026
+| tipo | posts | engajamento médio | melhor | sem engajamento |
+|---|---|---|---|---|
+| conteúdo dos jogos | 79 | 2.05 | 4 | 10 (12.7%) |
+| comentário em post alheio | 221 | 0.84 | 3 | 95 (43.0%) |
+"""
+PLA_DECISAO = """| meta | alvo | observado | falta | por dia | status |
+|---|---|---|---|---|---|
+| Instagram: seguidores | 50 | 0 | 50 | 2.63 | EM_CURSO |
+| Bluesky: seguidores | 50 | 34 | 16 | 0.84 | EM_CURSO |
+| itch: seguidores | 10 | NAO_OBSERVAVEL | — | — | SEM_LEITURA |
+"""
+a = casa.analise(PLA_DECISAO, DES_DECISAO)
+ok("a decisão aponta qual tipo de post rende mais", "2.4×" in a, a[:120])
+ok("a decisão usa o número real, não conselho genérico",
+   "2.05" in a and "0.84" in a and "ROAS" not in a and "HubSpot" not in a)
+ok("canal zerado é identificado como parado", "Parado em zero" in a and "Instagram" in a)
+ok("meta sem leitura aparece como ausência de dado, não como zero",
+   "Sem leitura" in a and "itch" in a)
+ok("a análise diz que não é previsão", "não previsão" in a or "não é previsão" in a)
+ok("sem dados, a análise não inventa", casa.analise("", "") is None)
+ok("pergunta de decisão é reconhecida", casa.pede_decisao("qual canal eu paro?"))
+ok("pergunta de decisão reconhece variações",
+   all(casa.pede_decisao(t) for t in ("vale a pena continuar no instagram?",
+                                      "ta funcionando?", "onde errei?", "qual o próximo passo?")))
+ok("conversa comum não é tratada como decisão",
+   not casa.pede_decisao("bom dia, tudo bem?"))
+fonte_resp = open(os.path.join(RAIZ, "responder.py"), encoding="utf-8").read()
+ok("o responder usa a análise antes de chamar o motor",
+   "pede_decisao(texto)" in fonte_resp and fonte_resp.index("pede_decisao(texto)") < fonte_resp.index("C.pensar_bem("))
+
 print("\n%d/%d verificações do estado da casa passaram" % (certos, certos + falhas))
 raise SystemExit(1 if falhas else 0)

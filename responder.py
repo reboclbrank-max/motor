@@ -488,6 +488,22 @@ def principal():
         except Exception as e:
             C.log(f"estado da casa: não atualizei ({e})")
 
+        # Pergunta de DECISÃO ("paro o Instagram?", "qual canal cortar?") responde com a
+        # análise dos números, sem passar pelo motor. Motivo medido: com as chaves de motor
+        # mortas, o último recurso devolveu marketing genérico ("pare o canal com ROAS < 2:1")
+        # e ignorou todos os dados da casa. Número genérico é pior que silêncio.
+        try:
+            import casa as _casa
+            if _casa.pede_decisao(texto) and len(texto) < 400:
+                _placar_txt = C.ler_de("site", "posts/placar-metas.md", "")
+                _des_txt = C.ler_de("site", "posts/desempenho.md", "")
+                _analise = _casa.analise(_placar_txt, _des_txt)
+                if _analise:
+                    responder(numero, _analise, marca)
+                    return 0
+        except Exception as e:
+            C.log(f"análise direta: não apliquei ({e})")
+
         # Pergunta sobre resultado/meta responde com números medidos, sem passar pelo motor:
         # rápido, honesto e impossível de inventar.
         if baixo in ("casa", "/casa", "estado", "/estado", "metas", "/metas",

@@ -225,6 +225,92 @@ def atualizar(ler_remoto=None):
     return texto
 
 
+# --------------------------------------------------------------- raciocínio
+# Palavras que pedem uma DECISÃO sobre desempenho, não uma explicação genérica.
+RE_PEDE_DECISAO = re.compile(
+    r"\b(parar|cortar|desistir|abandonar|vale a pena|ta funcionando|est[aá] funcionando|"
+    r"funcionando|investir|priorizar|focar|qual canal|que canal|o que fazer|proximo passo|"
+    r"pr[óo]ximo passo|melhorar|aumentar|onde errei|por que n[ãa]o cresce|porque n[ãa]o cresce)\b",
+    re.IGNORECASE)
+
+
+def _num(texto):
+    """Converte '45', '0.13', 'NAO_OBSERVAVEL' em número ou None. Nunca inventa."""
+    try:
+        return float(str(texto).replace(",", "."))
+    except (TypeError, ValueError):
+        return None
+
+
+def analise(texto_placar, texto_desempenho=None):
+    """Resposta de decisão montada dos números — sem passar por modelo.
+
+    POR QUE: quando as chaves de motor estão mortas, o motor cai num serviço de último
+    recurso que responde marketing genérico ("pare o canal com ROAS < 2:1"). Número
+    genérico é pior que silêncio. Aqui a conclusão sai dos dados medidos da casa, e o que
+    não foi medido aparece como não medido.
+
+    Não escolhe "o melhor canal" por achismo: compara retorno por publicação e diz qual
+    leitura falta para decidir o resto.
+    """
+    p = placar(texto_placar)
+    d = desempenho(texto_desempenho) if texto_desempenho else None
+    if not p and not d:
+        return None
+    linhas = ["**Decisão a partir do que foi medido** (não é opinião de marketing genérico):", ""]
+
+    # 1. retorno por publicação, quando medido
+    if d and d["por_tipo"]:
+        linhas.append("**Retorno por tipo de post (Bluesky, medição real):**")
+        for t in d["por_tipo"]:
+            linhas.append(f"- {t['tipo']}: média **{t['media']}**, sem retorno em {t['sem_retorno']}")
+        try:
+            valores = {t["tipo"]: float(t["media"]) for t in d["por_tipo"]}
+            if len(valores) == 2:
+                (a, va), (b, vb) = sorted(valores.items(), key=lambda kv: kv[1])
+                if va > 0:
+                    linhas.append("")
+                    linhas.append(f"→ **{b} rende {vb / va:.1f}× mais por post que {a}.** "
+                                  f"Se o tempo é limitado, é o primeiro lugar a cortar.")
+        except ValueError:
+            pass
+
+    # 2. metas: o que está parado e o que está andando
+    if p:
+        paradas = [m for m in p["metas"] if _num(m["observado"]) == 0]
+        vivas = [m for m in p["metas"] if (_num(m["observado"]) or 0) > 0 and m["status"] == "EM_CURSO"]
+        sem_leitura = [m for m in p["metas"] if m["status"] == "SEM_LEITURA"]
+        if paradas:
+            linhas.append("")
+            linhas.append("**Parado em zero:** " + " · ".join(m["meta"] for m in paradas)
+                          + " — publicar mais no mesmo canal sem entrada de público não muda isso.")
+        if vivas:
+            linhas.append("**Andando:** " + " · ".join(
+                f"{m['meta']} ({m['observado']}/{m['alvo']}, falta {m['falta']})" for m in vivas) + ".")
+        if sem_leitura:
+            linhas.append("**Sem leitura:** " + " · ".join(m["meta"] for m in sem_leitura)
+                          + " — não é zero, é ausência de dado.")
+
+    linhas.append("")
+    linhas.append("**O que eu faria, com base nisso:**")
+    if d and d["por_tipo"]:
+        linhas.append("1. Cortar o tipo de post de menor retorno e usar as vagas no de maior retorno "
+                      "(o medidor já separa os dois).")
+    if p and any(_num(m["observado"]) == 0 for m in p["metas"]):
+        linhas.append("2. Levar público de onde já existe para o canal zerado — é o único caminho "
+                      "sem criar conta, custo ou anúncio.")
+    linhas.append("3. Medir de novo antes de mudar outra coisa: duas mudanças juntas não dizem qual funcionou.")
+    linhas.append("")
+    linhas.append("_Isto é leitura dos números de agora, não previsão. O que não aparece aqui é "
+                  "porque não foi medido._")
+    return "\n".join(linhas)
+
+
+def pede_decisao(texto):
+    """Verdadeiro quando a mensagem pede decisão sobre desempenho."""
+    return bool(RE_PEDE_DECISAO.search(texto or ""))
+
+
 # -------------------------------------------------------------------- cache
 def gravar_cache(texto, caminho=None):
     """Guarda o último resumo bom para responder sem rede (e para o prompt do cérebro)."""
