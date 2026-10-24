@@ -1,0 +1,6 @@
+MEMORIA/
+provas/
+*.pyc
+__pycache__/
+.env
+*.token

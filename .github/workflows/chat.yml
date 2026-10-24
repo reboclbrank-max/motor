@@ -1,0 +1,91 @@
+name: chat (motor público)
+
+# Trabalhador do Assistente Rebocl rodando em repositório PÚBLICO.
+#
+# POR QUE: o repositório privado tem 2.000 minutos gratuitos por mês e a casa estourou.
+# Repositório público tem minutos ilimitados. Aqui roda só CÓDIGO: a memória e as
+# conversas continuam no repositório privado, baixadas e devolvidas por `sincronizar.py`
+# com o token guardado em secret.
+#
+# TRAVAS (não remover):
+#   1. `permissions: contents: read` — este job não escreve no próprio repositório.
+#   2. Nenhum evento de `pull_request`/`pull_request_target`: código de terceiro NUNCA
+#      roda com acesso aos secrets.
+#   3. Dispatch só é aceito quando quem disparou é o dono.
+#   4. A varredura só responde mensagem escrita pelo dono, e nunca duas vezes.
+#   5. Segredos só existem em `secrets.*`; nada de valor em arquivo ou log.
+
+on:
+  repository_dispatch:
+    types: [mensagem]
+  # Rede de segurança: pega o que o evento instantâneo perder.
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: motor-chat
+  cancel-in-progress: false
+
+jobs:
+  responder:
+    # O dono disparando, ou o próprio relógio. Estranho não aciona o cérebro.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.actor == 'reboclbrank-max'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Barreira offline (sem rede, sem segredo)
+        run: python3 teste-casa.py
+
+      - name: Baixar a memória do repositório privado
+        env:
+          PAT_MEMORIA: ${{ secrets.PAT_MEMORIA }}
+          REPO_MEMORIA: ${{ secrets.REPO_MEMORIA }}
+        run: python3 sincronizar.py baixar
+
+      - name: Responder o que ficou pendente
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_MEMORIA }}
+          PAT_MEMORIA: ${{ secrets.PAT_MEMORIA }}
+          REPO_CONVERSAS: ${{ secrets.REPO_MEMORIA }}
+          MAX_POR_RODADA: '3'
+          # --- motores (todos gratuitos; quanto mais chaves, mais caminhos) ---
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          HUGGINGFACE_API_KEY: ${{ secrets.HUGGINGFACE_API_KEY }}
+          CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          REQUESTY_API_KEY: ${{ secrets.REQUESTY_API_KEY }}
+          ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
+          ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+          SAMBANOVA_API_KEY: ${{ secrets.SAMBANOVA_API_KEY }}
+          GLAMA_API_KEY: ${{ secrets.GLAMA_API_KEY }}
+          UPSTAGE_API_KEY: ${{ secrets.UPSTAGE_API_KEY }}
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          LLM7_API_KEY: ${{ secrets.LLM7_API_KEY }}
+          OPENAI_COMPAT_KEY: ${{ secrets.OPENAI_COMPAT_KEY }}
+          OPENAI_COMPAT_BASE: ${{ secrets.OPENAI_COMPAT_BASE }}
+          OPENAI_COMPAT_MODEL: ${{ secrets.OPENAI_COMPAT_MODEL }}
+          # --- leitura real da casa, para o chat não responder de memória ---
+          ITCH_API_KEYS: ${{ secrets.ITCH_API_KEYS }}
+          YT_API_KEY: ${{ secrets.YT_API_KEY }}
+          IG_TOKEN: ${{ secrets.IG_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+        run: python3 varrer.py
+
+      - name: Devolver o que a resposta aprendeu (memória)
+        if: always()
+        env:
+          PAT_MEMORIA: ${{ secrets.PAT_MEMORIA }}
+          REPO_MEMORIA: ${{ secrets.REPO_MEMORIA }}
+        run: python3 sincronizar.py subir
