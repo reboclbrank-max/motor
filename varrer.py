@@ -92,8 +92,17 @@ def pendentes(limite_dias=None):
 def _evento_falso(issue):
     """Grava um evento sintético para o novo-conversa, e devolve o caminho."""
     caminho = os.path.join(tempfile.mkdtemp(), "evento.json")
+    # do_evento() exige action == "opened" para tratar como conversa nova — sem esse
+    # campo o evento era "ignorado" e a primeira mensagem de uma conversa nunca saía.
     with open(caminho, "w", encoding="utf-8") as f:
-        json.dump({"issue": {"number": issue.get("number"), "body": issue.get("body") or ""}}, f)
+        json.dump({
+            "action": "opened",
+            "issue": {
+                "number": issue.get("number"),
+                "body": issue.get("body") or "",
+                "user": issue.get("user") or {},
+            },
+        }, f)
     return caminho
 
 
