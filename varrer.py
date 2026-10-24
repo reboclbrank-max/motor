@@ -46,7 +46,9 @@ def _do_dono(usuario):
 
 def pendentes(limite_dias=None):
     """Lista (issue, comentario|None) cuja última mensagem do dono não foi respondida."""
-    desde = C.agora() - datetime.timedelta(hours=JANELA_HORAS if limite_dias is None else limite_dias)
+    # utcnow (naive) para comparar com o updated_at da API, que é naive depois do slice
+    desde = datetime.datetime.utcnow() - datetime.timedelta(
+        hours=JANELA_HORAS if limite_dias is None else limite_dias)
     try:
         issues = C.gh("GET", f"/repos/{C.REPO}/issues?state=open&sort=updated&direction=desc&per_page=30") or []
     except Exception as e:
