@@ -40,7 +40,7 @@ def _http(metodo, url, cabeceras=None, corpo=None, timeout=30):
 
 def _confere_instagram():
     """GET /me no Graph: confirma token e conta, sem publicar nada."""
-    token, uid = os.environ.get("IG_TOKEN", "").strip(), os.environ.get("IG_USER_ID", "").strip()
+    token, uid = C._k("IG_TOKEN"), C._k("IG_USER_ID")
     if not token or not uid:
         return "ausente", "IG_TOKEN/IG_USER_ID não configurados"
     url = ("https://graph.facebook.com/v21.0/" + urllib.parse.quote(uid)
@@ -53,7 +53,7 @@ def _confere_instagram():
 
 def _confere_itch():
     """GET /profile/me na API v1 do itch: valida a chave sem criar nada."""
-    chave = os.environ.get("ITCH_API_KEYS", "").strip()
+    chave = C._k("ITCH_API_KEYS")
     if not chave:
         return "ausente", "ITCH_API_KEYS não configurada"
     chave = chave.split(",")[0].strip()
@@ -69,7 +69,7 @@ def _confere_itch():
 
 def _confere_telegram():
     """getMe: barato, 1 chamada, confirma o bot que entrega o boletim."""
-    token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+    token = C._k("TELEGRAM_BOT_TOKEN")
     if not token:
         return "ausente", "TELEGRAM_BOT_TOKEN não configurado"
     ok, txt = _http("GET", f"https://api.telegram.org/bot{token}/getMe")
@@ -80,7 +80,7 @@ def _confere_telegram():
 
 def _confere_youtube():
     """Channels.list da própria conta: leitura, sem upload."""
-    chave = os.environ.get("YT_API_KEY", "").strip()
+    chave = C._k("YT_API_KEY")
     if not chave:
         return "ausente", "YT_API_KEY não configurada"
     # mine=true só funciona com OAuth de usuário; a chave de API valida em endpoint

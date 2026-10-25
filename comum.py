@@ -39,30 +39,44 @@ GH_TOKEN = os.environ.get("GITHUB_TOKEN", "").strip()
 REPO = (os.environ.get("REPO_CONVERSAS") or os.environ.get("GITHUB_REPOSITORY")
         or "reboclbrank-max/agente").strip()
 
+# Prefixos que identificam chave de verdade, por provedor. Serve para decidir quando um
+# blob base64 terminou de ser decodificado.
+PREFIXOS_DE_CHAVE = ("sk-", "sk_", "gsk_", "xai-", "hf_", "EAA", "IGAA", "eyJ", "nvapi-",
+                     "AIza", "solar", "pplx-", "gAAAAA", "rnd_", "zai-", "ac_", "sk-proj-")
+
+
 def _k(nome, padrao=""):
     """Lê a chave do ambiente já LIMPA, e é a única porta de entrada das chaves.
 
-    O cofre gravava cada chave em base64 duplo. Ao copiar para as Actions secrets do
-    repositório público o blob veio junto, e todo provedor respondia 401 — 10 de 10 — sem
-    ninguém ver, porque a chave "existia". Aqui o blob é decodificado até virar uma chave
-    imprimível de verdade; chave crua passa direto, sem tocar.
+    O cofre gravava cada chave em base64 (às vezes duas vezes). Copiadas para as Actions
+    secrets do repositório público, os blobs vieram junto: 10 de 10 provedores devolviam
+    401 e ninguém via, porque a chave "existia". Aqui o blob é decodificado em cadeia e a
+    forma escolhida é a primeira que parece chave de verdade (prefixo conhecido). Se
+    nenhuma parecer, vale o texto cru — chave legítima nunca é estragada por engano.
     """
     bruto = os.environ.get(nome, "").strip()
     if not bruto:
         return padrao
+    cadeia = [bruto]
     atual = bruto
-    for _ in range(2):
-        # blob do cofre termina em padding '=' e é base64 válido; chave crua não.
-        if not atual.endswith("="):
-            break
+    for _ in range(3):
         try:
+            # validate=True: chave crua com '-' ou '_' já não decodifica, e fica intacta
             texto = base64.b64decode(atual, validate=True).decode("utf-8")
         except Exception:
             break
-        if not texto or not texto.isprintable():
+        if not texto or not texto.isprintable() or texto == atual:
             break
-        atual = texto.strip()
-    return atual
+        cadeia.append(texto)
+        atual = texto
+    for candidato in cadeia:
+        if candidato.startswith(PREFIXOS_DE_CHAVE):
+            return candidato
+    # Nenhum prefixo reconhecido: só assume decodificação se o original era blob de fato
+    # (padding de base64 e o resultado menor e imprimível).
+    if len(cadeia) > 1 and "=" in bruto:
+        return cadeia[-1]
+    return bruto
 
 
 # chaves opcionais (quanto mais, mais motores — todos gratuitos)

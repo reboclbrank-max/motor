@@ -10,7 +10,6 @@ Regra: uma chamada curta por provedor, com resposta verificável. Não existe "a
 HTTP 200 com corpo vazio conta como MORTO, e resposta sem conteúdo legível conta como
 MORTO. O resultado entra em MEMORIA/prova-fogo.json para o boletim poder citar.
 """
-import base64
 import json
 import os
 import sys
@@ -64,32 +63,37 @@ def _forma(chave):
     return f"{prefixo}… {len(chave)} caracteres{dica}"
 
 
-def _variantes(chave):
-    """Formas possíveis da chave: crua, e decodificada 1× e 2× de base64.
+# Modelo que não serve para conversa: se o catálogo devolver isto primeiro, o teste mede
+# a coisa errada e o provedor parece morto por culpa nossa.
+_NAO_SERVE = ("embed", "whisper", "tts", "rerank", "guard", "moderation", "voice",
+              "image", "vision-only", "dall", "stable-diffusion", "flux")
 
-    O cofre gravava as chaves em base64 duplo. Ao injetar nos secrets do público, o blob
-    foi copiado como estava — e todo provedor devolvia 401 com 'chave' de 104-268
-    caracteres e '=' no fim. Decodificar antes de usar é o que faz a chave voltar a valer.
+
+def _modelos_do_catalogo(base, chave, quantos=3, timeout=20):
+    """Pergunta ao provedor quais modelos existem com esta chave.
+
+    400 e 404 quase nunca são chave ruim: é o nome do modelo que mudou (llama-3.3 virou
+    3.1, o slug do free tier mudou). Em vez de manter uma lista que apodrece, o teste lê
+    o catálogo e escolhe. Devolve [] se o provedor não expõe /models.
     """
-    formas, vistas = [], set()
-
-    def juntar(rotulo, valor):
-        if valor and valor not in vistas:
-            vistas.add(valor)
-            formas.append((rotulo, valor))
-
-    juntar("crua", chave)
-    atual = chave
-    for rotulo in ("base64", "base64×2"):
-        try:
-            bruto = base64.b64decode(atual, validate=True)
-            atual = bruto.decode("utf-8")
-        except Exception:
-            break
-        # chave de verdade é imprimível e não termina em '=' (isso é padding de blob)
-        if atual and atual.isprintable() and not atual.endswith("="):
-            juntar(rotulo, atual)
-    return formas
+    req = urllib.request.Request(base.rstrip("/") + "/models", headers={
+        "Authorization": "Bearer " + chave, "User-Agent": "Mozilla/5.0 (compatible; rebocl-motor)"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            dados = json.loads(r.read().decode("utf-8", "replace"))
+    except Exception:
+        return []
+    itens = dados.get("data") if isinstance(dados, dict) else dados
+    if not isinstance(itens, list):
+        return []
+    nomes = []
+    for item in itens:
+        nome = item.get("id") or item.get("name") if isinstance(item, dict) else str(item)
+        if not nome or any(x in nome.lower() for x in _NAO_SERVE):
+            continue
+        nomes.append(nome)
+    nomes.sort(key=lambda n: (":free" not in n, len(n)))  # free primeiro, nome mais curto
+    return nomes[:quantos]
 
 
 def _bater(base, modelo, chave, timeout=40):
@@ -129,29 +133,25 @@ def disparar():
     """Bate em cada provedor que tenha chave. Provedor sem chave não é falha: é ausente."""
     resultado, vivos, testados = {}, [], 0
     for nome, base, modelos, var in PROVEDORES:
-        chave = os.environ.get(var, "").strip()
+        chave = C._k(var)  # mesma porta única usada por todo o motor
         if not chave:
             resultado[nome] = {"estado": "sem chave", "detalhe": f"{var} não configurada"}
             continue
         testados += 1
         estado, detalhe, gasto, forma_usada, modelo_usado = "morto", "", 0.0, "crua", modelos[0]
-        for rotulo, candidata in _variantes(chave):
-            for modelo in modelos:
-                estado, detalhe, gasto = _bater(base, modelo, candidata)
-                forma_usada, modelo_usado = rotulo, modelo
-                if estado == "vivo":
-                    break
-                if "404" not in detalhe and "model" not in detalhe.lower():
-                    break  # não é problema de modelo: não adianta trocar
+        do_catalogo = _modelos_do_catalogo(base, chave)
+        for modelo in (do_catalogo + [m for m in modelos if m not in do_catalogo]):
+            estado, detalhe, gasto = _bater(base, modelo, chave)
+            modelo_usado = modelo
             if estado == "vivo":
                 break
+            if "404" not in detalhe and "model" not in detalhe.lower():
+                break  # não é problema de modelo: não adianta trocar
         resultado[nome] = {"estado": estado, "detalhe": detalhe, "modelo": modelo_usado,
-                           "segundos": gasto, "forma_da_chave": _forma(chave),
-                           "forma_que_funcionou": forma_usada if estado == "vivo" else None}
+                           "segundos": gasto, "forma_da_chave": _forma(chave)}
         if estado == "vivo":
             vivos.append(nome)
-        C.log(f"prova-de-fogo: {nome} → {estado} ({detalhe[:60]}) · chave: {_forma(chave)}"
-              + (f" · funcionou como {forma_usada}" if estado == "vivo" else ""))
+        C.log(f"prova-de-fogo: {nome} → {estado} ({detalhe[:60]}) · chave: {_forma(chave)}")
 
     try:
         C.escrever_remoto(ARQ, json.dumps({
