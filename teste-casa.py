@@ -537,5 +537,18 @@ ok("cadeia separa reserva por nota", "motores_de_confianca" in _fonte_comum3)
 ok("emergência só na segunda passada", "emergência: tentando os motores de nota baixa" in _fonte_comum3)
 ok("Gemini descobre o modelo na própria chave", "def modelos_gemini(" in _fonte_comum3)
 
+# 32. sem prova não há atestado: motor nunca medido fica de reserva
+if os.path.exists("confianca.py"):
+    import confianca as _CF2
+    _orig = _CF2.C._ranking_exatidao
+    _CF2.C._ranking_exatidao = lambda: {"Bom": 8}
+    _conf, _res = _CF2.motores_de_confianca([{"nome": "Bom"}, {"nome": "Sem Nota"}])
+    ok("motor sem nota fica de reserva",
+       [p["nome"] for p in _conf] == ["Bom"] and [p["nome"] for p in _res] == ["Sem Nota"])
+    _CF2.C._ranking_exatidao = lambda: {}
+    _todos, _nenhuma = _CF2.motores_de_confianca([{"nome": "X"}, {"nome": "Y"}])
+    ok("ranking vazio não trava a casa", len(_todos) == 2 and not _nenhuma)
+    _CF2.C._ranking_exatidao = _orig
+
 print("\n%d/%d verificações do estado da casa passaram" % (certos, certos + falhas))
 raise SystemExit(1 if falhas else 0)

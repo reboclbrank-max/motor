@@ -97,9 +97,12 @@ confiaveis, reserva = F.motores_de_confianca(
     [{"nome": "Motor Forte"}, {"nome": "Motor Fraco"}, {"nome": "Motor Médio"},
      {"nome": "Nunca Medido"}])
 checar("motor de nota baixa vai para a reserva",
-       [p["nome"] for p in reserva] == ["Motor Fraco"])
-checar("motor nunca medido não é punido",
-       "Nunca Medido" in [p["nome"] for p in confiaveis])
+       "Motor Fraco" in [p["nome"] for p in reserva]
+       and "Motor Forte" in [p["nome"] for p in confiaveis])
+checar("motor de nota média (4/8) continua respondendo",
+       "Motor Médio" in [p["nome"] for p in confiaveis])
+checar("motor nunca medido fica de reserva (sem prova, sem atestado)",
+       "Nunca Medido" in [p["nome"] for p in reserva])
 checar("modo emergência devolve todos",
        len(F.motores_de_confianca([{"nome": "Motor Fraco"}], modo_emergencia=True)[0]) == 1)
 

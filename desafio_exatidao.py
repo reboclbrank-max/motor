@@ -64,6 +64,8 @@ def _acertou(resposta, esperado, tipo):
 def medir():
     """Passa o desafio em cada motor vivo, na ordem da cadeia."""
     try:
+        # TODA a cadeia, inclusive os que hoje são reserva: motor sem nota fica de reserva
+        # para sempre, então a medição precisa alcançar todos.
         provedores = C.montar_provedores()
     except Exception as e:
         C.log(f"exatidão: não consegui montar a cadeia ({str(e)[:80]})")

@@ -53,10 +53,17 @@ def motores_de_confianca(provedores, modo_emergencia=False):
     confiaveis, reserva = [], []
     for p in provedores:
         nota = notas.get(p.get("nome"))
-        if nota is None or nota >= NOTA_MINIMA_CADEIA:
-            confiaveis.append(p)      # nunca medido entra: a nota é o piso, não a certidão
+        # SEM PROVA, É RESERVA. Antes eu deixava motor nunca medido passar como confiável, e
+        # isso reabria o buraco por outro lado: 12 motores sem nota respondiam direto. Quem
+        # não foi medido não tem atestado — entra na segunda passada, como qualquer reserva.
+        if nota is not None and nota >= NOTA_MINIMA_CADEIA:
+            confiaveis.append(p)
         else:
             reserva.append(p)
+    if not confiaveis:
+        # Se a medição não cobre ninguém, não travo a casa: volta tudo e o log avisa.
+        C.log("piso de nota: nenhum motor medido acima do piso — liberando a cadeia inteira")
+        return list(provedores), []
     return confiaveis, reserva
 
 
