@@ -1,0 +1,91 @@
+name: testa-ferramentas (ferramentas ao vivo, de dentro do runner)
+
+# Portado do privado em 25/10/2026: testa busca, tradução, e-mail e afins DE DENTRO do
+# runner — é onde a diferença entre 'a ferramenta responde' e 'a ferramenta responde
+# no GitHub' aparece. Só leitura: nada é publicado.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: testa-ferramentas
+  cancel-in-progress: false
+
+jobs:
+  bateria:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+
+      - name: Barreira offline (sem rede, sem segredo)
+        run: python3 teste-casa.py
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Ferramentas keyless ao vivo (de dentro do runner)
+        run: |
+          python3 - <<'PYEOF'
+          import sys, time
+          sys.path.insert(0, ".")
+          import comum as C
+
+          def veredito(nome, ok, detalhe=""):
+              print(("OK   " if ok else "FAIL ") + nome + (" | " + detalhe if detalhe else ""))
+
+          t0 = time.time()
+          try:
+              itens = C._busca_ddg_leitor("itch.io jogos de terror", 3)
+              veredito("busca ddg-lite", len(itens) >= 1, f"{len(itens)} resultados, 1o: {itens[0]['url'][:60]}")
+          except Exception as e:
+              veredito("busca ddg-lite", False, str(e)[:90])
+          try:
+              t = C.ferramenta_traduzir("remendando o cerebro | ingles")
+              veredito("traducao mymemory", "Tradução" in t or "TRADU" in t.upper(), t.splitlines()[1][:50] if len(t.splitlines()) > 1 else t[:50])
+          except Exception as e:
+              veredito("traducao mymemory", False, str(e)[:90])
+          try:
+              c = C.ferramenta_cambio("BTC")
+              veredito("cripto coingecko", "R$" in c, c.splitlines()[1][:40] if len(c.splitlines()) > 1 else c[:40])
+          except Exception as e:
+              veredito("cripto coingecko", False, str(e)[:90])
+          try:
+              n = C.ferramenta_cnpj("00.000.000/0001-91")
+              veredito("cnpj brasilapi", "•" in n, n.splitlines()[0][:50])
+          except Exception as e:
+              veredito("cnpj brasilapi", False, str(e)[:90])
+          try:
+              f = C.ferramenta_foto("pixel art")
+              veredito("fotos openverse", f.startswith("📷"), f.splitlines()[1][:60] if len(f.splitlines()) > 1 else f[:60])
+          except Exception as e:
+              veredito("fotos openverse", False, str(e)[:90])
+          print(f"bateria concluida em {time.time()-t0:.1f}s")
+          PYEOF
+
+      - name: E-mail dela ao vivo (SMTP + IMAP, de dentro do runner)
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_MEMORIA }}
+          EMAIL_ENDERECO: ${{ secrets.EMAIL_ENDERECO }}
+          EMAIL_SENHA_APP: ${{ secrets.EMAIL_SENHA_APP }}
+          EMAIL_PARA: ${{ secrets.EMAIL_PARA }}
+        run: |
+          python3 - <<'PYEOF'
+          import os, smtplib, imaplib
+          from email.mime.text import MIMEText
+          e, s, p = os.environ["EMAIL_ENDERECO"], os.environ["EMAIL_SENHA_APP"], os.environ["EMAIL_PARA"]
+          msg = MIMEText("Teste automatico: e-mail da assistente funcionando de dentro do runner (Actions).")
+          msg["Subject"] = "[teste automatico] e-mail dela no ar"
+          msg["From"], msg["To"] = e, p
+          with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as x:
+              x.login(e, s); x.sendmail(e, [p], msg.as_string())
+          print("OK   envio SMTP no actions")
+          with imaplib.IMAP4_SSL("imap.gmail.com", 993, timeout=30) as x:
+              x.login(e, s); x.select("INBOX", readonly=True)
+              tipo, dados = x.search(None, "(ALL)")
+              print("OK   leitura IMAP no actions:", len((dados[0] or b"").split()), "e-mails")
+          PYEOF
