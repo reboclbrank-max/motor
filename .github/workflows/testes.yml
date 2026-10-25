@@ -30,13 +30,16 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Contrato de segurança dos workflows
+        run: python3 teste-workflow-seguranca.py
+
       - name: Barreira offline (sem rede, sem segredo)
         run: |
           falhas=0
           for t in teste-casa.py teste-chat.py teste-cerebro.py teste-orquestrador.py \
                    teste-fila.py teste-estudo.py teste-palcos.py teste-piloto.py \
                    teste-semantica.py teste-caca.py teste-divulgacao.py teste-v37.py \
-                   teste-responder-emergencia.py teste-workflow-seguranca.py; do
+                   teste-responder-emergencia.py; do
             if [ -f "$t" ]; then
               printf '\n=== %s ===\n' "$t"
               python3 "$t" || falhas=$((falhas+1))

@@ -17,38 +17,31 @@ SETUP_PYTHON = "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # 
 # Orçamento deliberado do estado atual: toda ampliação de escopo precisa ser
 # revisada junto do contrato, em vez de aparecer silenciosamente em um YAML.
 PERMISSOES_ESPERADAS = {
-    "banco.yml": {"contents": "write", "issues": "read", "actions": "read"},
-    "batente.yml": {"contents": "read", "actions": "write"},
-    "bom-dia.yml": {"contents": "write"},
-    "caca-motores.yml": {"contents": "write"},
-    "caza-motores.yml": {"contents": "write"},
-    "chat.yml": {"contents": "write", "issues": "write"},
-    "checkup.yml": {"contents": "write"},
-    "confirmar-contas.yml": {"contents": "write"},
-    "diario.yml": {"contents": "read"},
-    "eco-devlog.yml": {"contents": "read"},
-    "espelho.yml": {"contents": "write"},
-    "estudo.yml": {"contents": "write"},
-    "inspire.yml": {"contents": "read", "issues": "write"},
-    "manutencao.yml": {"contents": "write", "issues": "write", "actions": "read"},
-    "marketing.yml": {"contents": "write"},
-    "melhoria-continua.yml": {"contents": "write"},
-    "oficina.yml": {"contents": "write"},
-    "piloto.yml": {"issues": "write", "contents": "write"},
-    "prova-de-fogo.yml": {"contents": "read"},
-    "relatorio-semanal.yml": {"contents": "write"},
-    "rotinas.yml": {"contents": "write", "issues": "write"},
-    "sentinela.yml": {"contents": "write", "issues": "write", "actions": "write"},
-    "sonda-bsky.yml": {"contents": "read"},
-    "sonho.yml": {"contents": "read", "issues": "write"},
-    "testa-ferramentas.yml": {"contents": "read"},
-    "testa-gh.yml": {"contents": "read"},
-    "testa-groq.yml": {"contents": "read"},
-    "testa-llm7.yml": {"contents": "read"},
-    "testa-models-github.yml": {"contents": "read", "models": "read"},
-    "teste-tumblr.yml": {"contents": "read"},
+    # Orçamento do repositório PÚBLICO (motor). Todos leem o código e escrevem na memória
+    # do privado pela API, com o PAT em secret — nenhum precisa de escrita aqui.
+    # Ampliar qualquer um destes exige revisar este contrato de propósito, não por descuido.
+    "auditoria-uso.yml": {"contents": "read"},
+    "banco.yml": {"contents": "read"},
+    "batente.yml": {"contents": "read"},
+    "boletim.yml": {"contents": "read"},
+    "caca-motores.yml": {"contents": "read"},
+    "chat.yml": {"contents": "read"},
+    "checkup.yml": {"contents": "read"},
+    "confirmar-contas.yml": {"contents": "read"},
+    "espelho.yml": {"contents": "read"},
+    "estudo.yml": {"contents": "read"},
+    "inspire.yml": {"contents": "read"},
+    "manutencao.yml": {"contents": "read"},
+    "melhoria-continua.yml": {"contents": "read"},
+    "motor-local.yml": {"contents": "read"},
+    "motores.yml": {"contents": "read"},
+    "oficina.yml": {"contents": "read"},
+    "piloto.yml": {"contents": "read"},
+    "relatorio-semanal.yml": {"contents": "read"},
+    "rotina.yml": {"contents": "read"},
+    "sentinela.yml": {"contents": "read"},
     "testes.yml": {"contents": "read"},
-    "varredura-motores.yml": {"contents": "write"},
+    "varredura-motores.yml": {"contents": "read"},
 }
 
 ok = True
@@ -170,9 +163,12 @@ for nome, fonte in (("worker", worker), ("barreira", testes)):
         r"actions/(?:checkout|setup-python)@v\d+", fonte
     ))
 
+CACHE = "actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830"  # v4, pinado por SHA
+
 REFERENCIAS_PERMITIDAS = {
     CHECKOUT.split(" #", 1)[0],
     SETUP_PYTHON.split(" #", 1)[0],
+    CACHE,
 }
 caminhos_workflows = sorted((RAIZ / ".github" / "workflows").glob("*.yml"))
 checar(
@@ -235,17 +231,14 @@ checar(
     chaves_repetidas_de_steps(amostra_repetida) == [("run", 4)],
 )
 
-bloco = re.search(
-    r"^\s*- name: pacote cérebro e Chat público\s*\n\s*run: \|\s*\n"
-    r"(?P<comandos>(?:\s{10,}[^\n]+\n?)+)",
-    testes,
-    re.MULTILINE,
-)
-checar("pacote crítico usa um único bloco YAML run", bloco is not None)
-if bloco:
-    comandos = bloco.group("comandos")
+# O pacote crítico virou um laço (roda as 14 suítes e conta falhas). O contrato passa a
+# exigir que cada suíte crítica apareça UMA vez no laço, e que o laço exista.
+bloco_laco = re.search(r"for t in ([^;]+?); do", testes, re.MULTILINE)
+checar("pacote crítico usa um único bloco YAML run", bloco_laco is not None)
+if bloco_laco:
+    lista = bloco_laco.group(1)
     for arquivo in ("teste-cerebro.py", "teste-caca.py", "teste-chat.py"):
-        checar("pacote crítico executa " + arquivo, comandos.count(arquivo) == 1)
+        checar("pacote crítico executa " + arquivo, lista.count(arquivo) == 1)
 
 checar(
     "contrato offline entra na barreira",
