@@ -561,6 +561,9 @@ if os.path.exists("desafio_exatidao.py"):
     ok("acertar tudo o que respondeu dá nota cheia", _DX.nota_relativa(5, 5) == (8, True))
     ok("amostra pequena não vira nota", _DX.nota_relativa(3, 3)[1] is False)
     ok("existe espera antes de desistir do motor", hasattr(_DX, "_perguntar"))
+    ok("presença conta na nota (calar na metade derruba)", _DX.nota_plantao(4, 4, 8)[0] == 4)
+    ok("nota de plantão cobra as duas coisas", _DX.nota_plantao(6, 8, 8)[0] == 6)
+    ok("motivo do silêncio é declarado, não suposto", hasattr(_DX, "erro_de_portaria"))
 
 print("\n%d/%d verificações do estado da casa passaram" % (certos, certos + falhas))
 raise SystemExit(1 if falhas else 0)

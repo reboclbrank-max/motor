@@ -80,6 +80,22 @@ checar("acertou 3 de 5 vale 5", _D.nota_relativa(3, 5) == (5, True))
 checar("amostra pequena não vale nota", _D.nota_relativa(3, 3) == (0, False))
 checar("quem não respondeu nada não pontua", _D.nota_relativa(0, 0) == (0, False))
 checar("a medição espera antes de desistir (429 não é burrice)", "def _perguntar(" in open("desafio_exatidao.py", encoding="utf-8").read())
+# ---- presença entra na nota (o dono não aceitou "disponibilidade é desculpa") -----------
+checar("acerto perfeito com metade calada não é nota cheia",
+       _D.nota_plantao(4, 4, 8) == (4, 8, 4, True))
+checar("quem responde tudo e acerta 6 leva 6", _D.nota_plantao(6, 8, 8) == (6, 6, 8, True))
+checar("presença manda quando é pior que o acerto", _D.nota_plantao(4, 5, 8) == (5, 6, 5, True))
+checar("amostra pequena continua sem nota", _D.nota_plantao(3, 3, 8)[3] is False)
+checar("assinar 'porta fechada' é diferente de 'espere'",
+       _D.erro_de_portaria("HTTP Error 403: Forbidden")
+       and not _D.erro_de_portaria("HTTP Error 504: Gateway Timeout"))
+checar("DNS morto conta como porta fechada",
+       _D.erro_de_portaria("<urlopen error [Errno -2] Name or service not known>"))
+_fonte = open("desafio_exatidao.py", encoding="utf-8").read()
+checar("quem calou no meio ganha segunda passada", "segunda passada" in _fonte)
+checar("motor com porta fechada não gasta as 8 perguntas", "erro_de_portaria(erro)" in _fonte)
+checar("a rodada tem prazo declarado", "PRAZO_MINUTOS" in _fonte)
+checar("a medição guarda o motivo do silêncio", '"motivo": motivo' in _fonte)
 
 print("\nteste-exatidao:", "PASSOU" if ok else "FALHOU")
 sys.exit(0 if ok else 1)
