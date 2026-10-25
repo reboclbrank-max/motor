@@ -96,7 +96,7 @@ def _modelos_do_catalogo(base, chave, quantos=3, timeout=20):
     return nomes[:quantos]
 
 
-def _bater(base, modelo, chave, timeout=60):
+def _bater(base, modelo, chave, timeout=60, tentativas=2):
     """Uma chamada curta. Devolve (estado, detalhe, segundos)."""
     url = base.rstrip("/") + "/chat/completions"
     corpo = json.dumps({"model": modelo, "max_tokens": 12,
@@ -107,7 +107,10 @@ def _bater(base, modelo, chave, timeout=60):
         "User-Agent": "Mozilla/5.0 (compatible; rebocl-motor)",
     })
     t0 = time.time()
-    try:
+    for rodada in range(tentativas):
+      if rodada:
+          time.sleep(4)  # 429 é limite passageiro: uma pausa curta costuma resolver
+      try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             bruto = r.read().decode("utf-8", "replace")
             gasto = round(time.time() - t0, 1)
@@ -126,9 +129,13 @@ def _bater(base, modelo, chave, timeout=60):
                 # tentativa, não o veredito de morte.
                 return "vazio", "HTTP 200 mas sem conteúdo", gasto
             return "vivo", f"{conteudo[:40]} ({gasto}s)", gasto
-    except urllib.error.HTTPError as e:
+      except urllib.error.HTTPError as e:
+        if e.code == 429 and rodada + 1 < tentativas:
+            continue
         return "morto", f"HTTP {e.code}", round(time.time() - t0, 1)
-    except Exception as e:
+      except Exception as e:
+        if rodada + 1 < tentativas and "timed out" not in str(e):
+            continue
         return "morto", str(e)[:80], round(time.time() - t0, 1)
 
 
