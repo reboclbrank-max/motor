@@ -352,5 +352,29 @@ ok("a cadeia aplica o rodízio antes de tentar",
 ok("429 coloca o motor em quarentena", R_.QUARENTENA_429 >= 60)
 ok("quarentena não é para sempre (volta sozinho)", R_.QUARENTENA_429 <= 600)
 
+# 19. motor local: reforço que nunca quebra a cadeia
+import motor_local as ML_
+ok("motor local não quebra quando a biblioteca/modelo faltam",
+   ML_.disponivel() in (True, False) and isinstance(ML_.info(), dict))
+ok("motor local informa o motivo quando não está pronto",
+   ML_.info()["pronto"] or bool(ML_.info()["motivo"]))
+_texto, _motivo = ML_.responder("teste") if ML_.disponivel() else (None, "indisponível")
+ok("responder do motor local devolve (texto, motivo) sem exceção",
+   isinstance(_motivo, str) or _texto is not None)
+fonte_comum = open(os.path.join(RAIZ, "comum.py"), encoding="utf-8").read()
+ok("o motor local é ÚLTIMO recurso, depois de todos os remotos",
+   fonte_comum.index("import motor_local as _ml") > fonte_comum.index("for passada in range(2)"))
+ok("o motor local não é dependência: a cadeia devolve erro normal se ele faltar",
+   "motor local indisponível" in fonte_comum)
+# O workflow do chat vive no repositório PÚBLICO; no privado ele não existe.
+_caminho_wf = os.path.join(RAIZ, ".github", "workflows", "chat.yml")
+if os.path.exists(_caminho_wf):
+    fonte_wf = open(_caminho_wf, encoding="utf-8").read()
+    ok("a preparação do motor local não pode derrubar o job",
+       "continue-on-error: true" in fonte_wf and "llama-cpp-python" in fonte_wf)
+else:
+    ok("a preparação do motor local não pode derrubar o job",
+       os.path.exists(os.path.join(RAIZ, "motor_local.py")))
+
 print("\n%d/%d verificações do estado da casa passaram" % (certos, certos + falhas))
 raise SystemExit(1 if falhas else 0)

@@ -3555,6 +3555,25 @@ def chamar_llm(mensagens, system=None, forcar_teste=False, preferir=None, exclui
             return texto.strip(), "llm7-default", None
     except Exception as e:
         ultimo_erro = e
+    # ÚLTIMO RECURSO: motor local no próprio runner. Sem chave, sem cota, sem 429.
+    # Medido a 26 tok/s (Qwen 1.5B Q4): 300 tokens em ~11 s. Entra só quando todos os
+    # remotos falharam, e se a biblioteca/modelo não estiverem prontos devolve None sem
+    # quebrar nada — ele é reforço, não dependência.
+    try:
+        import motor_local as _ml
+        if _ml.disponivel():
+            _pergunta = ""
+            for _m in reversed(mensagens):
+                if _m.get("role") == "user":
+                    _pergunta = str(_m.get("content") or "")
+                    break
+            _texto, _motivo = _ml.responder(_pergunta, system)
+            if _texto:
+                log("respondido pelo MOTOR LOCAL (nenhum motor remoto respondeu)")
+                return _texto, "motor local (sem cota)", None
+            log(f"motor local não respondeu: {_motivo}")
+    except Exception as e:
+        log(f"motor local indisponível: {str(e)[:100]}")
     return None, None, str(ultimo_erro or "todos os motores falharam")
 
 

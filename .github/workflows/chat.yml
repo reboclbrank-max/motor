@@ -51,6 +51,24 @@ jobs:
         with:
           python-version: '3.12'
 
+      # MOTOR LOCAL: modelo roda no próprio runner — sem chave, sem cota, sem 429.
+      # Medido: Qwen2.5-1.5B Q4 a 26 tok/s (300 tokens em ~11 s) com AVX2.
+      # `continue-on-error` porque isto é REFORÇO: se a instalação falhar, o Chat segue
+      # normalmente com os motores remotos. Nunca pode ser motivo de quebra.
+      - name: Guardar o modelo local entre execuções
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/motor-local
+          key: motor-local-qwen15-v1
+
+      - name: Preparar o motor local (opcional)
+        continue-on-error: true
+        run: |
+          python3 -m pip install --quiet --extra-index-url \
+            https://abetlen.github.io/llama-cpp-python/whl/cpu llama-cpp-python \
+            || echo "sem llama-cpp: o Chat segue só com os remotos"
+          python3 -c "import motor_local; print('motor local:', motor_local.info())"
+
       - name: Barreira offline (sem rede, sem segredo)
         run: python3 teste-casa.py
 

@@ -135,7 +135,8 @@ def main():
     print("\n" + "=" * 70)
     if resultados:
         for r in resultados:
-            print(f"{r['nome']}: {r['tok_s']} tok/s · 300 tokens em ~{r['seg_300_tokens']}s · "
+            _seg = r.get("seg_300_tokens")
+            print(f"{r['nome']}: {r['tok_s']} tok/s · 300 tokens em ~{_seg}s · "
                   f"desafio {'ACERTOU' if r['acertou'] else 'falhou'}")
         with open("resultado-local.json", "w", encoding="utf-8") as f:
             json.dump(resultados, f, ensure_ascii=False, indent=1)

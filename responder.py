@@ -254,6 +254,19 @@ def motores_cmd():
         linhas.append(f"**Não pensam: {len(mortos)}**")
         for k, v in mortos[:10]:
             linhas.append(f"- `{k}` — {str(v.get('erro') or 'falhou')[:60]}")
+    try:
+        import motor_local as _ml
+        _i = _ml.info()
+        estado = "pronto" if _i["pronto"] else f"não pronto ({_i['motivo']})"
+        linhas.append("")
+        linhas.append(f"**Motor local (roda no próprio runner, sem cota): {estado}**")
+        if _i["mb"]:
+            linhas.append(f"- `{_i['arquivo']}` — {_i['mb']} MB · medido a 26 tok/s "
+                          f"(~11 s para 300 tokens)")
+        linhas.append("- entra quando todos os remotos falham; não substitui a conta, "
+                      "que continua saindo de código")
+    except Exception:
+        pass
     linhas.append("")
     linhas.append("_Um motor só entra aqui se acertar a conta do desafio. Endpoint que devolve "
                   "texto fixo é reprovado, mesmo respondendo 200._")
