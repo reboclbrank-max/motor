@@ -23,12 +23,15 @@ import time
 import urllib.request
 
 MODELOS = [
-    ("Qwen2.5-0.5B-Instruct Q4_K_M",
+    ("Qwen2.5-0.5B Q4",
      "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf",
      "qwen2.5-0.5b-instruct-q4_k_m.gguf"),
-    ("Qwen2.5-1.5B-Instruct Q4_K_M",
+    ("Qwen2.5-1.5B Q4",
      "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf",
      "qwen2.5-1.5b-instruct-q4_k_m.gguf"),
+    ("Qwen2.5-3B Q4",
+     "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf",
+     "qwen2.5-3b-instruct-q4_k_m.gguf"),
 ]
 
 CACHE = os.path.expanduser("~/.cache/motor-local")
@@ -64,21 +67,34 @@ def testar(nome, url, arquivo):
     # desafio de raciocínio: mesma prova que uso nos motores remotos
     pergunta = ("Uma caixa tem 17 pacotes com 6 unidades cada. Saem 23 unidades. "
                 "Quantas unidades ficam? Responda só com o número.")
-    # CHAT TEMPLATE, não completion cru: o Qwen é treinado com <|im_start|> e responder
-    # texto solto faz o modelo pequeno errar conta que acertaria no formato certo.
-    t0 = time.time()
+    # MEDIÇÃO DA VELOCIDADE À PARTE DA QUALIDADE.
+    # Erro da medição anterior: resposta de 2 tokens dividida pelo tempo total dá "3 tok/s",
+    # mas isso mede o custo de acordar o modelo, não a velocidade. Aqui sai uma resposta de
+    # tamanho fixo e tiro a média de 2 rodadas, descartando a primeira (que carrega o cache).
+    llm.create_chat_completion(messages=[{"role": "user", "content": "aqueca"}], max_tokens=8)
+    medicoes = []
+    for _ in range(2):
+        t0 = time.time()
+        saida_v = llm.create_chat_completion(
+            messages=[{"role": "user", "content": "Escreva um paragrafo curto sobre jogos indie."}],
+            max_tokens=150, temperature=0.7)
+        d = time.time() - t0
+        n = saida_v["usage"]["completion_tokens"]
+        if d > 0 and n > 5:
+            medicoes.append(n / d)
+    tok_s = sum(medicoes) / len(medicoes) if medicoes else 0.0
+    print(f"  velocidade: {tok_s:.1f} tok/s (media de {len(medicoes)} rodadas de 150 tokens)")
+
+    # AGORA a qualidade, com o template de chat correto
     saida = llm.create_chat_completion(
         messages=[{"role": "system", "content": "Responda só com o número, sem explicação."},
                   {"role": "user", "content": pergunta}],
         max_tokens=48, temperature=0.0)
-    dur = time.time() - t0
     texto = (saida["choices"][0]["message"]["content"] or "").strip()
-    tokens = saida["usage"]["completion_tokens"]
-    tok_s = tokens / dur if dur else 0
     acertou = "79" in texto  # 17*6-23 = 79
     print(f"  resposta: {texto[:80]!r}")
-    print(f"  {tokens} tokens em {dur:.1f}s = {tok_s:.1f} tok/s · desafio: "
-          f"{'ACERTOU' if acertou else 'ERROU'} (esperado 79)")
+    print(f"  desafio: {'ACERTOU' if acertou else 'ERROU'} (esperado 79) → {texto[:60]!r}")
+    print(f"  resposta de 300 tokens levaria ~{300 / tok_s:.0f}s" if tok_s else "  sem medição")
 
     # pergunta aberta, para ver se escreve texto utilizável
     t0 = time.time()
@@ -86,7 +102,7 @@ def testar(nome, url, arquivo):
         messages=[{"role": "user", "content": "Em duas frases, por que o céu é azul?"}],
         max_tokens=90, temperature=0.3)
     dur2 = time.time() - t0
-    print(f"  texto aberto ({dur2:.1f}s): {(out['choices'][0]['message']['content'] or '').strip()[:200]!r}")
+    print(f"  qualidade do texto ({dur2:.1f}s): {(out['choices'][0]['message']['content'] or '').strip()[:220]!r}")
     return {"nome": nome, "mb": round(mb), "tok_s": round(tok_s, 1),
             "acertou": acertou, "seg_200_tokens": round(200 / tok_s, 1) if tok_s else None}
 
@@ -119,8 +135,8 @@ def main():
     print("\n" + "=" * 70)
     if resultados:
         for r in resultados:
-            print(f"{r['nome']}: {r['tok_s']} tok/s · resposta de 200 tokens em "
-                  f"~{r['seg_200_tokens']}s · desafio {'ok' if r['acertou'] else 'falhou'}")
+            print(f"{r['nome']}: {r['tok_s']} tok/s · 300 tokens em ~{r['seg_300_tokens']}s · "
+                  f"desafio {'ACERTOU' if r['acertou'] else 'falhou'}")
         with open("resultado-local.json", "w", encoding="utf-8") as f:
             json.dump(resultados, f, ensure_ascii=False, indent=1)
         print("\nCÓDIGO DE SAÍDA 0 — há motor local viável")
