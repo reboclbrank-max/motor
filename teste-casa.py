@@ -436,12 +436,14 @@ ok("a auditoria cobra sozinha (roda em cron e posta relatório)",
                       encoding="utf-8").read() and "issues" in fonte_aud)
 # os robôs portados existem de verdade
 _robos = ["checkup", "sentinela", "relatorio-semanal", "estudo", "oficina", "melhoria-continua",
-          "boletim", "rotina", "inspire", "manutencao", "espelho", "banco"]
+          "boletim", "rotina", "inspire", "manutencao", "espelho", "banco",
+          "batente", "piloto", "caca-motores", "varredura-motores", "confirmar-contas", "testes"]
 _faltando = [r for r in _robos
              if not os.path.exists(os.path.join(RAIZ, ".github", "workflows", f"{r}.yml"))]
-ok("os 12 robôs portados estão no repositório público", not _faltando, str(_faltando))
+ok("os 18 robôs portados estão no repositório público", not _faltando, str(_faltando))
 _scripts = ["checkup", "sentinela", "relatorio", "estudo", "oficina", "digestao", "autocritica",
-            "boletim", "rotina", "inspire", "manutencao", "banco"]
+            "boletim", "rotina", "inspire", "manutencao", "banco", "piloto", "confirmar_contas",
+            "varredura", "teste-chat", "teste-orquestrador", "teste-semantica"]
 _faltando_s = [x for x in _scripts if not os.path.exists(os.path.join(RAIZ, f"{x}.py"))]
 ok("os scripts que os robôs usam estão presentes", not _faltando_s, str(_faltando_s))
 
