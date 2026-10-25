@@ -302,19 +302,31 @@ finally:
     os.chdir(_orig); shutil.rmtree(_tmp, ignore_errors=True)
 
 # 17. camada de DADOS: o que a casa sabe entra no prompt sem depender de motor
+# A barreira roda ANTES do download da memória, então estes testes usam conteúdo de
+# exemplo. Teste que depende de arquivo baixado quebra a barreira — e barreira quebrada
+# não protege nada.
 import dados as D_
-ok("a camada de dados acha o número medido nos arquivos da casa",
-   any("45" in l and "itch" in l.lower() for _f, l in D_.procurar("quantos downloads o itch teve")),
-   str(D_.procurar("quantos downloads o itch teve"))[:160])
-ok("acha também seguidores do bluesky",
-   any("34" in l for _f, l in D_.procurar("quantos seguidores o bluesky tem")))
-_ctx = D_.montar_contexto("quantos downloads o itch teve e quantos seguidores no bluesky")
-ok("o contexto sai formatado com fonte e aviso de não inventar",
-   _ctx.startswith("FATOS DA CASA") and "[" in _ctx and "não invente" in _ctx)
-ok("o contexto respeita o teto de tamanho", len(_ctx) <= 1300, f"{len(_ctx)} chars")
-ok("pergunta sem relação devolve vazio (não inventa contexto)",
-   D_.montar_contexto("xilofone pantográfico quântico") == "")
-ok("pergunta vazia devolve vazio", D_.montar_contexto("") == "")
+_EXEMPLO = [
+    ("MEMORIA/estado-casa.md", "- itch: downloads: alvo 100 · observado 45 · falta 55 · EM_CURSO"),
+    ("MEMORIA/estado-casa.md", "- Bluesky: seguidores: alvo 50 · observado 34 · falta 16 · EM_CURSO"),
+    ("MEMORIA/manual.md", "**Empresa:** estúdio indie. Jogos: Ceifalume 0.1 e Prancheta 0.1 no itch.io"),
+]
+_original = D_._linhas_da_casa
+D_._linhas_da_casa = lambda: list(_EXEMPLO)
+try:
+    ok("a camada de dados acha o número medido",
+       any("45" in l for _f, l in D_.procurar("quantos downloads o itch teve")))
+    ok("acha também seguidores do bluesky",
+       any("34" in l for _f, l in D_.procurar("quantos seguidores o bluesky tem")))
+    _ctx = D_.montar_contexto("quantos downloads o itch teve e quantos seguidores no bluesky")
+    ok("o contexto sai formatado com fonte e aviso de não inventar",
+       _ctx.startswith("FATOS DA CASA") and "[" in _ctx and "não invente" in _ctx)
+    ok("o contexto respeita o teto de tamanho", len(_ctx) <= 1300, f"{len(_ctx)} chars")
+    ok("pergunta sem relação devolve vazio (não inventa contexto)",
+       D_.montar_contexto("xilofone pantográfico quântico") == "")
+    ok("pergunta vazia devolve vazio", D_.montar_contexto("") == "")
+finally:
+    D_._linhas_da_casa = _original
 fonte_resp = open(os.path.join(RAIZ, "responder.py"), encoding="utf-8").read()
 ok("a camada de dados é usada ANTES de chamar o motor",
    "texto_com_dados" in fonte_resp
