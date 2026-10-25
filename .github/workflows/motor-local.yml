@@ -1,0 +1,71 @@
+name: motor local (sem cota)
+
+# Testa e usa um modelo que roda DENTRO do runner: sem chave, sem API, sem 429.
+#
+# POR QUE: os 6 motores sem chave que a casa usa (llm7, g4f, Pollinations) têm limite
+# compartilhado com todo mundo — 429 aparece sem aviso. Em vez de correr atrás de mais
+# cota, este workflow verifica se o runner consegue gerar texto sozinho.
+#
+# Custo zero: repositório público tem minutos ilimitados; o modelo fica em cache.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Uma vez por dia, para saber se o motor local continua viável e quanto rende.
+    - cron: '30 6 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: motor-local
+  cancel-in-progress: false
+
+jobs:
+  local:
+    if: github.event_name == 'schedule' || github.actor == 'reboclbrank-max'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      # Pinado por SHA (tag móvel comprometida rodaria com o PAT no ambiente).
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+
+      - name: Instalar llama.cpp (roda em CPU, sem GPU)
+        run: |
+          pip install --quiet --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu llama-cpp-python
+          python3 -c "import llama_cpp; print('llama_cpp ok')"
+
+      - name: Guardar o modelo entre execuções
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/motor-local
+          key: motor-local-qwen25-v1
+
+      - name: Medir o motor local
+        run: python3 testar-local.py
+
+      - name: Guardar o resultado no privado
+        if: always()
+        env:
+          PAT_MEMORIA: ${{ secrets.PAT_MEMORIA }}
+          REPO_MEMORIA: ${{ secrets.REPO_MEMORIA }}
+        run: |
+          python3 - <<'EOF'
+          import json, os
+          try:
+              from comum import escrever_remoto, agora
+              with open("resultado-local.json", encoding="utf-8") as f:
+                  dados = json.load(f)
+              escrever_remoto("MEMORIA/motor-local.json",
+                              json.dumps({"quando": agora().isoformat(), "modelos": dados},
+                                         ensure_ascii=False, indent=1),
+                              "motor local: medicao")
+              print("resultado guardado")
+          except FileNotFoundError:
+              print("sem resultado para guardar (nenhum modelo rodou)")
+          except Exception as e:
+              print(f"nao guardei: {e}")
+          EOF
