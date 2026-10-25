@@ -62,10 +62,15 @@ def testar(nome, url, arquivo):
     # desafio de raciocínio: mesma prova que uso nos motores remotos
     pergunta = ("Uma caixa tem 17 pacotes com 6 unidades cada. Saem 23 unidades. "
                 "Quantas unidades ficam? Responda só com o número.")
+    # CHAT TEMPLATE, não completion cru: o Qwen é treinado com <|im_start|> e responder
+    # texto solto faz o modelo pequeno errar conta que acertaria no formato certo.
     t0 = time.time()
-    saida = llm(f"Pergunta: {pergunta}\nResposta:", max_tokens=32, temperature=0.0, stop=["\n"])
+    saida = llm.create_chat_completion(
+        messages=[{"role": "system", "content": "Responda só com o número, sem explicação."},
+                  {"role": "user", "content": pergunta}],
+        max_tokens=48, temperature=0.0)
     dur = time.time() - t0
-    texto = saida["choices"][0]["text"].strip()
+    texto = (saida["choices"][0]["message"]["content"] or "").strip()
     tokens = saida["usage"]["completion_tokens"]
     tok_s = tokens / dur if dur else 0
     acertou = "79" in texto  # 17*6-23 = 79
@@ -75,10 +80,11 @@ def testar(nome, url, arquivo):
 
     # pergunta aberta, para ver se escreve texto utilizável
     t0 = time.time()
-    out = llm("Pergunta: em duas frases, por que o ceu e azul?\nResposta:",
-              max_tokens=80, temperature=0.3)
+    out = llm.create_chat_completion(
+        messages=[{"role": "user", "content": "Em duas frases, por que o céu é azul?"}],
+        max_tokens=90, temperature=0.3)
     dur2 = time.time() - t0
-    print(f"  texto aberto ({dur2:.1f}s): {out['choices'][0]['text'].strip()[:160]!r}")
+    print(f"  texto aberto ({dur2:.1f}s): {(out['choices'][0]['message']['content'] or '').strip()[:200]!r}")
     return {"nome": nome, "mb": round(mb), "tok_s": round(tok_s, 1),
             "acertou": acertou, "seg_200_tokens": round(200 / tok_s, 1) if tok_s else None}
 
