@@ -276,5 +276,11 @@ ok("texto vazio é tratado como bastidor", C_.parece_veredicto(""))
 ok("o juiz cujo veredicto é descartado cai na melhor resposta original",
    "juiz descartado" in open(os.path.join(RAIZ, "comum.py"), encoding="utf-8").read())
 
+# 15. a marca de "pensa de verdade" não pode ser apagada por uma resposta normal
+fonte = open(os.path.join(RAIZ, "comum.py"), encoding="utf-8").read()
+ok("chamar_llm preserva cerebro/acertos_cerebro ao atualizar o diagnóstico",
+   'for _campo in ("cerebro", "acertos_cerebro", "testes_cerebro")' in fonte
+   and fonte.count('_campo in antigo') >= 2)
+
 print("\n%d/%d verificações do estado da casa passaram" % (certos, certos + falhas))
 raise SystemExit(1 if falhas else 0)

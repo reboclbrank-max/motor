@@ -3475,10 +3475,16 @@ def chamar_llm(mensagens, system=None, forcar_teste=False, preferir=None, exclui
                     antigo = estados.get(p["id"], {})
                     oks = int(antigo.get("ok_total") or 0) + 1
                     medio_antigo = antigo.get("ms_medio") or ms
-                    estados[p["id"]] = {"ok": True, "testado": agora_iso, "ms_ultimo": ms,
-                                        "ms_medio": int((medio_antigo * (oks - 1) + ms) / oks),
-                                        "ok_total": oks, "falhas_total": int(antigo.get("falhas_total") or 0),
-                                        "modelos": p.get("modelos") or [p.get("modelo")]}
+                    _novo = {"ok": True, "testado": agora_iso, "ms_ultimo": ms,
+                             "ms_medio": int((medio_antigo * (oks - 1) + ms) / oks),
+                             "ok_total": oks, "falhas_total": int(antigo.get("falhas_total") or 0),
+                             "modelos": p.get("modelos") or [p.get("modelo")]}
+                    # NÃO apagar o resultado do desafio: sem isto, cada resposta do Chat
+                    # limpa a marca de "pensa de verdade" e o quadro fica zerado.
+                    for _campo in ("cerebro", "acertos_cerebro", "testes_cerebro"):
+                        if _campo in antigo:
+                            _novo[_campo] = antigo[_campo]
+                    estados[p["id"]] = _novo
                     diag["provedores"] = estados
                     marcar_uso(diag, p["id"])
                     salvar_diagnostico(diag)
@@ -3488,9 +3494,13 @@ def chamar_llm(mensagens, system=None, forcar_teste=False, preferir=None, exclui
                 ultimo_erro = e
                 log(f"motor {p['id']} falhou (passada {passada+1}, {ms} ms): {str(e)[:150]}")
                 antigo = estados.get(p["id"], {})
-                estados[p["id"]] = {"ok": False, "testado": agora_iso, "erro": str(e)[:200],
-                                    "ms_ultimo": ms, "ok_total": int(antigo.get("ok_total") or 0),
-                                    "falhas_total": int(antigo.get("falhas_total") or 0) + 1}
+                _novo = {"ok": False, "testado": agora_iso, "erro": str(e)[:200],
+                         "ms_ultimo": ms, "ok_total": int(antigo.get("ok_total") or 0),
+                         "falhas_total": int(antigo.get("falhas_total") or 0) + 1}
+                for _campo in ("cerebro", "acertos_cerebro", "testes_cerebro"):
+                    if _campo in antigo:
+                        _novo[_campo] = antigo[_campo]
+                estados[p["id"]] = _novo
         diag["provedores"] = estados
         diag["ultima_falha"] = {"quando": agora_iso, "erro": str(ultimo_erro)[:300]}
         salvar_diagnostico(diag)
