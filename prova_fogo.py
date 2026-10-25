@@ -119,9 +119,12 @@ def _bater(base, modelo, chave, timeout=40):
                 return "morto", "resposta não é JSON", gasto
             escolha = (dados.get("choices") or [{}])[0]
             msg = escolha.get("message") or {}
-            conteudo = (msg.get("content") or msg.get("reasoning_content") or "").strip()
+            conteudo = (msg.get("content") or msg.get("reasoning_content")
+                        or escolha.get("text") or "").strip()
             if not conteudo:
-                return "morto", "HTTP 200 mas sem conteúdo", gasto
+                # modelo de raciocínio às vezes devolve só finish_reason. Vale a próxima
+                # tentativa, não o veredito de morte.
+                return "vazio", "HTTP 200 mas sem conteúdo", gasto
             return "vivo", f"{conteudo[:40]} ({gasto}s)", gasto
     except urllib.error.HTTPError as e:
         return "morto", f"HTTP {e.code}", round(time.time() - t0, 1)
@@ -143,10 +146,16 @@ def disparar():
         for modelo in (do_catalogo + [m for m in modelos if m not in do_catalogo]):
             estado, detalhe, gasto = _bater(base, modelo, chave)
             modelo_usado = modelo
+            qualquer_modelo = True
             if estado == "vivo":
                 break
-            if "404" not in detalhe and "model" not in detalhe.lower():
+            if "404" not in detalhe and "422" not in detalhe and "400" not in detalhe \
+                    and "vazio" not in detalhe and "model" not in detalhe.lower():
                 break  # não é problema de modelo: não adianta trocar
+        if estado in ("vazio",) and qualquer_modelo:
+            estado = "limitado"  # chave vale, os modelos free não devolvem texto
+        elif estado == "morto" and qualquer_modelo and "400" in detalhe:
+            estado = "limitado"
         resultado[nome] = {"estado": estado, "detalhe": detalhe, "modelo": modelo_usado,
                            "segundos": gasto, "forma_da_chave": _forma(chave)}
         if estado == "vivo":
