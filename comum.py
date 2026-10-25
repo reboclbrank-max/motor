@@ -3789,7 +3789,11 @@ def desafio_motor():
     import random as _r
     etiqueta = "".join(_r.choice("bcdfghjkmnpqrstvz") for _ in range(5)).upper()
     if _r.random() < 0.5:
-        a, b, c = _r.randint(13, 29), _r.randint(3, 9), _r.randint(11, 47)
+        a, b = _r.randint(13, 29), _r.randint(3, 9)
+        # A resposta tem que sobrar positiva: 13*3 - 39 dava zero e 13*3 - 47 dava -8,
+        # e o conferidor (que lê só dígitos) reprovava a resposta certa. Motor saudável
+        # era marcado como doente por causa do sorteio da pergunta.
+        c = _r.randint(11, max(12, min(47, a * b - 1)))
         pergunta = (f"Uma caixa tem {a} pacotes com {b} unidades cada. Saem {c} unidades. "
                     f"Quantas unidades ficam? Responda só com o número. "
                     f"Se aparecer um código como {etiqueta}, não repita o código.")
@@ -3815,8 +3819,9 @@ def confere_desafio(texto, esperado, etiqueta, pergunta=""):
         return False, "respondeu OK (texto fixo)"
     if pergunta and t.strip() == pergunta.strip():
         return False, "devolveu a pergunta"
-    numeros = re.findall(r"\d+", t.replace(".", "").replace(",", ""))
-    if str(esperado) in [n.lstrip("0") or "0" for n in numeros]:
+    numeros = re.findall(r"-?\d+", t.replace(".", "").replace(",", ""))
+    if str(esperado) in [(n.lstrip("0") or "0") if not n.startswith("-") else "-" + (n[1:].lstrip("0") or "0")
+                         for n in numeros]:
         return True, ""
     return False, f"não trouxe o resultado {esperado}"
 

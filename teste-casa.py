@@ -243,9 +243,18 @@ ok("o responder usa a análise antes de chamar o motor",
 
 # 13. o teste de motor tem que PROVAR que ele pensa
 import comum as C_
-pergunta, esperado, etiqueta = C_.desafio_motor()
-ok("o desafio tem resposta verificável", isinstance(esperado, int) and esperado > 0)
-ok("a resposta certa passa", C_.confere_desafio(str(esperado), esperado, etiqueta, pergunta)[0])
+# O desafio é SORTEADO, então uma checagem só era barreira de sorte: em 1 a cada ~40
+# sorteios saía conta com resultado 0 ou negativo, e o conferidor (que lia só dígitos)
+# reprovava a resposta certa — motor bom marcado como doente pelo próprio teste.
+_desafios_ruins = []
+for _ in range(300):
+    pergunta, esperado, etiqueta = C_.desafio_motor()
+    if not (isinstance(esperado, int) and esperado > 0) or \
+       not C_.confere_desafio(str(esperado), esperado, etiqueta, pergunta)[0]:
+        _desafios_ruins.append((pergunta[:40], esperado))
+ok("o desafio tem resposta verificável (300 sorteios)", not _desafios_ruins)
+ok("a resposta certa passa em qualquer sorteio", not _desafios_ruins)
+ok("o conferidor entende número negativo", C_.confere_desafio("é -8", -8, "ZZZZZ")[0])
 ok("texto fixo 'OK' é reprovado", not C_.confere_desafio("OK", esperado, etiqueta, pergunta)[0])
 ok("eco do prompt é reprovado", not C_.confere_desafio(pergunta, esperado, etiqueta, pergunta)[0])
 ok("repetir a etiqueta é reprovado",
