@@ -245,8 +245,20 @@ def local_cmd(pergunta):
             return ("O motor local não está pronto nesta execução "
                     f"(`{_ml.info()['motivo']}`). Ele é preparado pelo workflow do chat; "
                     "se a instalação falhou, o Chat segue com os motores da nuvem.")
+        # Modelo pequeno é gerador de LINGUAGEM, não fonte de FATO: o 1.5B afirmou que a
+        # pressão é menor ao nível do mar. Por isso os fatos da casa entram antes, e a
+        # instrução proíbe completar número de cabeça.
+        contexto = ""
+        try:
+            import dados as _d
+            contexto = _d.montar_contexto(pergunta)
+        except Exception:
+            pass
+        pedido = (contexto + "\n\nPergunta do dono: " + pergunta) if contexto else pergunta
+        sistema = ("Responda em português do Brasil, direto. Use SOMENTE os fatos fornecidos "
+                   "quando eles existirem; não invente número. Se não souber, diga que não sabe.")
         t0 = _t.time()
-        texto, motivo = _ml.responder(pergunta, "Responda em português do Brasil, direto.")
+        texto, motivo = _ml.responder(pedido, sistema)
         dur = _t.time() - t0
         if not texto:
             return f"O motor local não respondeu ({motivo})."
