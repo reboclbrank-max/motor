@@ -57,9 +57,13 @@ def _confere_itch():
     if not chave:
         return "ausente", "ITCH_API_KEYS não configurada"
     chave = chave.split(",")[0].strip()
-    ok, txt = _http("GET", "https://api.itch.io/profile/me?api_key=" + urllib.parse.quote(chave))
+    # Endpoint real do itch é /api/1/<chave>/me; api.itch.io devolve 404 ("invalid api
+    # endpoint"). Com chave boa volta "user"; com chave ruim volta {"errors":["invalid key"]}.
+    ok, txt = _http("GET", "https://itch.io/api/1/" + urllib.parse.quote(chave) + "/me")
     if ok and '"user"' in txt:
         return "vivo", "chave aceita pela API do itch"
+    if "invalid key" in txt:
+        return "falhou", "chave recusada pelo itch (invalid key)"
     return "falhou", txt
 
 
@@ -79,9 +83,12 @@ def _confere_youtube():
     chave = os.environ.get("YT_API_KEY", "").strip()
     if not chave:
         return "ausente", "YT_API_KEY não configurada"
-    ok, txt = _http("GET", "https://www.googleapis.com/youtube/v3/channels?part=id&mine=true&key=" + urllib.parse.quote(chave))
+    # mine=true só funciona com OAuth de usuário; a chave de API valida em endpoint
+    # público. Sem isso o teste reprovava chave boa com 401.
+    ok, txt = _http("GET", "https://www.googleapis.com/youtube/v3/videos?part=id"
+                          "&chart=mostPopular&maxResults=1&key=" + urllib.parse.quote(chave))
     if ok:
-        return "vivo", "chave aceita (leitura)"
+        return "vivo", "chave aceita (leitura pública)"
     return "falhou", txt
 
 
@@ -132,7 +139,7 @@ def _rascunho(canal, pistas, vivo):
               "inventar número, sem prometer o que não foi feito. Devolva só o texto do post.")
     base = ("Fatos de hoje na casa (use só o que estiver aqui):\n- " + "\n- ".join(pistas[:10])
             if pistas else "Nenhum fato novo registrado.")
-    pedido = (f"{base}\n\nEscreva um post de até {limite} caracteres sobre o que foi feito hoje. "
+    pedido = (f"{base}\n\nEscreva um post para {canal}, de até {limite} caracteres, sobre o que foi feito hoje. "
               "Se não houver fato novo, escreva uma nota curta de bastidor.")
     try:
         texto, modelo, erro = C.chamar_llm([{"role": "user", "content": pedido}], system=system)
