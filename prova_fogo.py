@@ -20,7 +20,25 @@ import urllib.request
 import comum as C
 
 ARQ = "MEMORIA/prova-fogo.json"
-PERGUNTA = "Responda apenas: ok"
+# A pergunta tem resposta conferível: o modelo tem que SEGUIR a instrução e produzir a
+# palavra. HTTP 200 com texto qualquer não passa — é o que separa "endpoint existe" de
+# "motor responde".
+PERGUNTA = "Responda apenas com a palavra PARDAL, nada mais."
+ESPERADO = "PARDAL"
+
+# Sem chave, sem conta, sem cota de terceiro: os que substituem as chaves esgotadas.
+# MEDIDOS em 25/10/2026 — a medição está no comentário de cada um.
+PROVEDORES_SEM_CHAVE = [
+    ("ovh-llama70b", "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1",
+     ["Meta-Llama-3_3-70B-Instruct"], "0,8 s em 25/10"),
+    ("ovh-mistral-nemo", "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1",
+     ["Mistral-Nemo-Instruct-2407"], "0,6 s em 25/10"),
+    ("g4f-lightning", "https://nvidia.g4f.dev/v1",
+     ["nvidia/nemotron-3.5-lightning-30b-a3b"], "1,7 s em 25/10"),
+    ("g4f-auto", "https://nvidia.g4f.dev/v1", ["auto"], "9,7 s em 25/10"),
+    ("pollinations-fast", "https://text.pollinations.ai/openai", ["openai-fast"], "2,1 s em 25/10"),
+    ("ovh-qwen-9b", "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1", ["Qwen3.5-9B"], "10,1 s em 25/10"),
+]
 
 # (nome, base, [modelos a tentar em ordem], variável de ambiente da chave)
 #
@@ -99,7 +117,7 @@ def _modelos_do_catalogo(base, chave, quantos=3, timeout=20):
 def _bater(base, modelo, chave, timeout=60, tentativas=2):
     """Uma chamada curta. Devolve (estado, detalhe, segundos)."""
     url = base.rstrip("/") + "/chat/completions"
-    corpo = json.dumps({"model": modelo, "max_tokens": 12,
+    corpo = json.dumps({"model": modelo, "max_tokens": 400,  # modelo de raciocínio gasta o começo pensando
                         "messages": [{"role": "user", "content": PERGUNTA}]}).encode()
     req = urllib.request.Request(url, data=corpo, method="POST", headers={
         "Content-Type": "application/json",
@@ -128,7 +146,11 @@ def _bater(base, modelo, chave, timeout=60, tentativas=2):
                 # modelo de raciocínio às vezes devolve só finish_reason. Vale a próxima
                 # tentativa, não o veredito de morte.
                 return "vazio", "HTTP 200 mas sem conteúdo", gasto
-            return "vivo", f"{conteudo[:40]} ({gasto}s)", gasto
+            if ESPERADO.lower() not in conteudo.lower():
+                # respondeu, mas não seguiu a instrução: serve para conversa, não para
+                # tarefa que exige exatidão. É "limitado", não "vivo".
+                return "limitado", f"respondeu sem seguir a instrução: {conteudo[:40]}", gasto
+            return "vivo", f"{ESPERADO} em {gasto}s", gasto
       except urllib.error.HTTPError as e:
         if e.code == 429 and rodada + 1 < tentativas:
             continue
@@ -169,16 +191,34 @@ def disparar():
             vivos.append(nome)
         C.log(f"prova-de-fogo: {nome} → {estado} ({detalhe[:60]}) · chave: {_forma(chave)}")
 
+
+    sem_chave, sem_chave_vivos = {}, []
+    for nome, base, modelos, medida in PROVEDORES_SEM_CHAVE:
+        estado, detalhe, gasto = "morto", "", 0.0
+        for modelo in modelos:
+            estado, detalhe, gasto = _bater(base, modelo, "unused")
+            if estado == "vivo":
+                break
+        sem_chave[nome] = {"estado": estado, "detalhe": detalhe, "modelo": modelos[0],
+                           "segundos": gasto, "medido_em": medida}
+        if estado == "vivo":
+            sem_chave_vivos.append(nome)
+        C.log(f"prova-de-fogo: {nome} (sem chave) → {estado} ({detalhe[:50]})")
+
     try:
         C.escrever_remoto(ARQ, json.dumps({
             "quando": C.agora().isoformat(timespec="seconds"),
             "testados": testados, "vivos": vivos, "provedores": resultado,
+            "sem_chave": sem_chave, "sem_chave_vivos": sem_chave_vivos,
+            "criterio": f"resposta tem que conter {ESPERADO} — HTTP 200 sozinho não passa",
         }, ensure_ascii=False), "prova-de-fogo: quem respondeu de verdade")
     except Exception as e:
         C.log(f"prova-de-fogo: não consegui gravar o resultado ({str(e)[:80]})")
 
     return (f"🔥 Prova de fogo: {len(vivos)}/{testados} chaves respondem"
-            + (f" ({', '.join(vivos)})" if vivos else " — nenhuma"))
+            + (f" ({', '.join(vivos)})" if vivos else " — nenhuma")
+            + f" · sem chave: {len(sem_chave_vivos)}/{len(PROVEDORES_SEM_CHAVE)}"
+            + (f" ({', '.join(sem_chave_vivos)})" if sem_chave_vivos else ""))
 
 
 if __name__ == "__main__":

@@ -3174,6 +3174,21 @@ def montar_provedores():
                        "base": "https://quillbot.com/api/ai-chat", "chave": "unused", "modelo": "quillbot",
                        "timeout": 60})
 
+    # KEYLESS MEDIDOS (25/10/2026) — cobrem o papel das chaves que esgotaram.
+    # Cada um respondeu a pergunta conferível ("responda apenas PARDAL") de dentro do
+    # runner e de fora dele. Sem chave, sem conta, sem cota de terceiro: é o que o dono
+    # pede quando diz que não quer ficar refém de API.
+    KEYLESS_MEDIDOS = [
+        ("OVH Llama-70B (sem chave)", "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1", "Meta-Llama-3_3-70B-Instruct", 0.8),
+        ("OVH Mistral-Nemo (sem chave)", "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1", "Mistral-Nemo-Instruct-2407", 0.6),
+        ("g4f lightning (sem chave)", "https://nvidia.g4f.dev/v1", "nvidia/nemotron-3.5-lightning-30b-a3b", 1.7),
+        ("Pollinations openai-fast (sem chave)", "https://text.pollinations.ai/openai", "openai-fast", 2.1),
+    ]
+    for _i, (_nome, _base, _modelo, _s) in enumerate(KEYLESS_MEDIDOS):
+        provedores.append({"nome": _nome, "id": f"keyless{_i + 1}", "tipo": "openai",
+                           "base": _base, "chave": "unused", "modelos": [_modelo],
+                           "modelo": _modelo, "timeout": 60})
+
     # OURO 2ª leva (todos vivos provados 11/10): flash/oss20/nano-omni/lightning
     for _g4 in (("z-ai/glm-5.3-flash", "g4fn-flash", "Mundial g4f (glm-flash)"), ("openai/gpt-oss-20b", "g4fn-oss20", "Mundial g4f (gpt-oss-20b)"), ("nvidia/nemotron-3-nano-omni-30b-a3b-reasoning", "g4fn-nano", "Mundial g4f (nano-omni)"), ("nvidia/nemotron-3.5-lightning-30b-a3b", "g4fn-light", "Mundial g4f (lightning)")):
         provedores.append({"nome": _g4[2], "id": _g4[1], "tipo": "openai", "base": "https://nvidia.g4f.dev/v1", "chave": "unused", "modelos": [_g4[0]], "modelo": _g4[0], "timeout": 60})
@@ -3210,9 +3225,12 @@ def montar_provedores():
         ("Kilo Ling-3.1-Flash (colhido vivo)", "https://api.kilo.ai/api/gateway", "inclusionai/ling-3.1-flash")
     ]
     for i, (nome, base, modelo) in enumerate(MUNDIAIS):
+        # OVH Llama-70B/Mistral-Nemo foram MEDIDOS em 25/10 (0,8 s e 0,6 s): saem do
+        # canto do comitê e passam a valer como motor comum. O resto segue como reserva.
+        _provado = nome in ("OVH Llama-70B", "OVH Mistral-Nemo")
         provedores.append({"nome": nome, "id": f"mundial{i + 1}", "tipo": "openai",
                            "base": base, "chave": "unused", "modelos": [modelo],
-                           "modelo": modelo, "timeout": 45, "so_comite": True})
+                           "modelo": modelo, "timeout": 45, "so_comite": not _provado})
 
     # OURO keyless da caça (nvidia.g4f.dev): auto/glm-5.3/kimi-k3/ultra — vivos provados 11/10
     for _g4 in (("auto", "g4fn-auto", "Mundial g4f (auto)"), ("z-ai/glm-5.3", "g4fn-glm", "Mundial g4f (glm-5.3)"), ("moonshotai/kimi-k3", "g4fn-kimi", "Mundial g4f (kimi-k3)"), ("nvidia/nemotron-3-ultra-550b-a55b", "g4fn-ultra", "Mundial g4f (ultra-550b)")):

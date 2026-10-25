@@ -485,5 +485,15 @@ _os.environ["CHAVE_DE_TESTE"] = _cru
 ok("_k não estraga chave crua", C_._k("CHAVE_DE_TESTE") == _cru)
 _os.environ.pop("CHAVE_DE_TESTE", None)
 
+# 28. as chaves que esgotaram têm substituto sem chave, medido e vigiado
+_fonte_pf = open("prova_fogo.py", encoding="utf-8").read()
+ok("prova-de-fogo cobre motores sem chave", "PROVEDORES_SEM_CHAVE" in _fonte_pf)
+ok("prova-de-fogo exige a palavra pedida (200 sozinho não passa)",
+   "ESPERADO.lower() not in conteudo.lower()" in _fonte_pf)
+ok("há pelo menos 4 sem-chave vigiados",
+   _fonte_pf.count('", "https://') >= 4)
+_fonte_comum2 = open("comum.py", encoding="utf-8").read()
+ok("o cérebro usa os sem-chave medidos", "KEYLESS_MEDIDOS" in _fonte_comum2)
+
 print("\n%d/%d verificações do estado da casa passaram" % (certos, certos + falhas))
 raise SystemExit(1 if falhas else 0)
