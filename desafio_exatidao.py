@@ -73,10 +73,15 @@ def medir():
         for pergunta, esperado, tipo in DESAFIO:
             t0 = time.time()
             try:
-                texto, modelo, erro = C._chamar_provedor(p, [{"role": "user", "content": pergunta}],
-                                                         "Responda de forma curta e direta.")
+                # _chamar_provedor devolve TEXTO (ou None). Já tentei desempacotar como
+                # tupla e a medição inteira saiu 0/8 por erro meu, não dos motores.
+                texto = C._chamar_provedor(p, [{"role": "user", "content": pergunta}],
+                                           "Responda de forma curta e direta.")
+                if not isinstance(texto, str):
+                    texto = None
             except Exception as e:
-                texto, modelo, erro = None, None, str(e)[:60]
+                C.log(f"exatidão: {nome} falhou ({str(e)[:70]})")
+                texto = None
             tempos.append(round(time.time() - t0, 1))
             ok = bool(texto) and _acertou(texto, esperado, tipo)
             acertos += 1 if ok else 0
@@ -89,8 +94,10 @@ def medir():
         if respostas:
             pergunta, esperado = HONESTIDADE
             try:
-                texto, _, _ = C._chamar_provedor(p, [{"role": "user", "content": pergunta}],
-                                                 "Responda de forma curta e direta.")
+                texto = C._chamar_provedor(p, [{"role": "user", "content": pergunta}],
+                                           "Responda de forma curta e direta.")
+                if not isinstance(texto, str):
+                    texto = None
             except Exception:
                 texto = None
             honesto = bool(texto) and esperado in _limpar(texto)
