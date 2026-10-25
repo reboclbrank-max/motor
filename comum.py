@@ -218,7 +218,25 @@ def ler_de(repo, caminho, padrao=""):
     return padrao
 
 
+def _gravar_local_memoria(caminho, conteudo):
+    """Espelha no disco o que foi escrito direto na API.
+
+    POR QUE: `sincronizar.py subir` envia os arquivos do DISCO. Se `escrever_remoto` não
+    atualizasse a cópia local, o passo de subida reenviava a versão baixada no início do job
+    e desfazia a escrita — foi assim que o quadro de motores voltou zerado duas vezes, com o
+    teste tendo rodado certo e o resultado "sumindo" no fim do workflow.
+    """
+    try:
+        if caminho.startswith("MEMORIA/") and os.path.isdir("MEMORIA"):
+            os.makedirs(os.path.dirname(caminho) or ".", exist_ok=True)
+            with open(caminho, "w", encoding="utf-8") as f:
+                f.write(conteudo)
+    except Exception as e:
+        log(f"espelho local de {caminho} não gravou: {e}")
+
+
 def escrever_remoto(caminho, conteudo, mensagem):
+    _gravar_local_memoria(caminho, conteudo)
     for tentativa in range(3):
         info = None
         try:

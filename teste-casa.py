@@ -7,6 +7,7 @@ errado com cara de certeza, ou agir (publicar) sem o dono ter pedido. Cada teste
 offline, com leitura falsa — sem rede, sem token, sem publicar nada.
 """
 import importlib.util
+import json
 import os
 import re
 import tempfile
@@ -281,6 +282,22 @@ fonte = open(os.path.join(RAIZ, "comum.py"), encoding="utf-8").read()
 ok("chamar_llm preserva cerebro/acertos_cerebro ao atualizar o diagnóstico",
    'for _campo in ("cerebro", "acertos_cerebro", "testes_cerebro")' in fonte
    and fonte.count('_campo in antigo') >= 2)
+
+# 16. escrita remota tem de espelhar no disco, senão o "subir" desfaz
+fonte = open(os.path.join(RAIZ, "comum.py"), encoding="utf-8").read()
+ok("escrever_remoto espelha o arquivo no disco antes de enviar",
+   "_gravar_local_memoria(caminho, conteudo)" in fonte
+   and fonte.index("_gravar_local_memoria(caminho, conteudo)") < fonte.index("for tentativa in range(3):"))
+import tempfile, shutil
+_orig = os.getcwd()
+_tmp = tempfile.mkdtemp(); os.makedirs(os.path.join(_tmp, "MEMORIA"))
+try:
+    os.chdir(_tmp)
+    C_._gravar_local_memoria("MEMORIA/teste-espelho.json", '{"ok": true}')
+    ok("o espelho local é gravado de fato",
+       json.load(open(os.path.join(_tmp, "MEMORIA", "teste-espelho.json")))["ok"] is True)
+finally:
+    os.chdir(_orig); shutil.rmtree(_tmp, ignore_errors=True)
 
 print("\n%d/%d verificações do estado da casa passaram" % (certos, certos + falhas))
 raise SystemExit(1 if falhas else 0)
