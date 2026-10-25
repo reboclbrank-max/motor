@@ -144,3 +144,45 @@ def montar_contexto(pergunta, k=4):
     if len(linhas) == 1:
         return ""
     return "\n".join(linhas)
+
+
+# ------------------------------------------------------------ resposta direta
+# Um número medido não deve ser interpretado por modelo. O Qwen 1.5B, recebendo
+# "itch: downloads: alvo 100 · observado 45 · falta 55", respondeu "downloads: 100" —
+# pegou a meta no lugar da medição. Não é bug do modelo: é pedir leitura de número a quem
+# gera linguagem. Quando a pergunta é de consulta, a resposta sai do arquivo, formatada.
+RE_CONSULTA = re.compile(
+    r"\b(quantos?|quantas?|qual\s+(?:o|a|os|as)\s+\w+|quanto\s+(?:falta|tem|falta)|"
+    r"me\s+diz\s+(?:os|as|o|a)\s+n[úu]meros?|n[úu]meros?|placar|metas?)\b",
+    re.IGNORECASE)
+
+RE_MEDIDA = re.compile(r"(observado|atual|medido|alvo|falta|total)", re.IGNORECASE)
+
+
+def resposta_direta(pergunta):
+    """Resposta pronta a partir dos arquivos, sem modelo. None quando não é consulta."""
+    if not pergunta or len(pergunta) > 300:
+        return None
+    if not RE_CONSULTA.search(pergunta):
+        return None
+    achados = procurar(pergunta, k=6)
+    uteis = [(f, l) for f, l in achados if RE_MEDIDA.search(l) and re.search(r"\d", l)]
+    if not uteis:
+        return None
+    linhas = ["**Do que está medido** (lido dos arquivos agora, sem passar por modelo):", ""]
+    vistos = set()
+    for fonte, linha in uteis:
+        limpa = linha.lstrip("-*• ").replace("**", "").strip()
+        chave = limpa[:60].lower()
+        if chave in vistos:
+            continue
+        vistos.add(chave)
+        linhas.append(f"- {limpa}  ·  _({os.path.basename(fonte)})_")
+        if len(linhas) >= 7:
+            break
+    if len(linhas) <= 2:
+        return None
+    linhas.append("")
+    linhas.append("_Número lido do arquivo da casa. Se faltar alguma coisa, é porque não foi "
+                  "medida ainda — e aí eu digo que não sei, em vez de estimar._")
+    return "\n".join(linhas)

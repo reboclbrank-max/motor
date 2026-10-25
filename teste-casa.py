@@ -396,5 +396,23 @@ ok("o comando !local avisa quando o motor não está pronto",
 ok("o comando !local mostra o tempo e que não usou cota",
    "sem chave, sem API, sem cota" in fonte_resp)
 
+# 21. consulta de número não passa por modelo (modelo pequeno troca alvo por observado)
+_EX_NUM = [("MEMORIA/estado-casa.md", "- itch: downloads: alvo 100 · observado 45 · falta 55 · EM_CURSO"),
+           ("MEMORIA/estado-casa.md", "- Bluesky: seguidores: alvo 50 · observado 34 · falta 16 · EM_CURSO")]
+_orig2 = D_._linhas_da_casa
+D_._linhas_da_casa = lambda: list(_EX_NUM)
+try:
+    _r = D_.resposta_direta("quantos downloads o itch tem?")
+    ok("consulta de número responde direto do arquivo", _r and "observado 45" in _r, str(_r)[:120])
+    ok("a resposta direta mostra a fonte", _r and "estado-casa.md" in _r)
+    ok("a resposta direta não promete estimativa", _r and "em vez de estimar" in _r)
+    ok("conversa comum não é tratada como consulta",
+       D_.resposta_direta("bom dia, tudo bem?") is None)
+finally:
+    D_._linhas_da_casa = _orig2
+fonte_resp = open(os.path.join(RAIZ, "responder.py"), encoding="utf-8").read()
+ok("a resposta direta vem antes do motor",
+   fonte_resp.index("resposta_direta") < fonte_resp.index("C.pensar_bem(pergunta_pensar"))
+
 print("\n%d/%d verificações do estado da casa passaram" % (certos, certos + falhas))
 raise SystemExit(1 if falhas else 0)

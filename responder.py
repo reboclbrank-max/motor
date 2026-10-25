@@ -754,6 +754,16 @@ def principal():
         # Motivo: motor pequeno COM o fato certo acerta; motor grande SEM contexto inventa.
         # A recuperação lê os arquivos (memória, placar, medições) e não depende de API.
         texto_com_dados = texto
+        # CONSULTA DE NÚMERO: sai do arquivo, não do modelo. Modelo pequeno troca "alvo" por
+        # "observado" (aconteceu na issue #39: respondeu downloads=100 com 45 medidos).
+        try:
+            import dados as _dd
+            _direta = _dd.resposta_direta(texto)
+            if _direta:
+                responder(numero, _direta, marca)
+                return 0
+        except Exception as e:
+            C.log(f"resposta direta não usada ({str(e)[:80]})")
         try:
             import dados as _dados
             _ctx = _dados.montar_contexto(texto)
