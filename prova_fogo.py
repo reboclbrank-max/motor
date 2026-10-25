@@ -30,11 +30,11 @@ ESPERADO = "PARDAL"
 # MEDIDOS em 25/10/2026 — a medição está no comentário de cada um.
 PROVEDORES_SEM_CHAVE = [
     ("ovh-llama70b", "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1",
-     ["Meta-Llama-3_3-70B-Instruct"], "0,8 s em 25/10"),
+     ["Meta-Llama-3_3-70B-Instruct"], "0,8 s do sandbox, 403 do runner — janela por IP"),
     ("ovh-mistral-nemo", "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1",
-     ["Mistral-Nemo-Instruct-2407"], "0,6 s em 25/10"),
+     ["Mistral-Nemo-Instruct-2407"], "0,6 s do sandbox, 403 do runner — janela por IP"),
     ("g4f-lightning", "https://nvidia.g4f.dev/v1",
-     ["nvidia/nemotron-3.5-lightning-30b-a3b"], "1,7 s em 25/10"),
+     ["nvidia/nemotron-3.5-lightning-30b-a3b"], "4,1 s no runner em 25/10"),
     ("g4f-auto", "https://nvidia.g4f.dev/v1", ["auto"], "9,7 s em 25/10"),
     ("pollinations-fast", "https://text.pollinations.ai/openai", ["openai-fast"], "2,1 s em 25/10"),
     ("ovh-qwen-9b", "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1", ["Qwen3.5-9B"], "10,1 s em 25/10"),

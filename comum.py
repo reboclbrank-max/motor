@@ -3178,11 +3178,13 @@ def montar_provedores():
     # Cada um respondeu a pergunta conferível ("responda apenas PARDAL") de dentro do
     # runner e de fora dele. Sem chave, sem conta, sem cota de terceiro: é o que o dono
     # pede quando diz que não quer ficar refém de API.
+    # A medida que vale é a do runner, não a do meu sandbox: o OVH respondeu 0,8 s daqui
+    # e dá 403 de lá (bloqueia por IP), então NÃO entra como primeira classe — fica como
+    # reserva de janela. Os três abaixo responderam no runner em 25/10.
     KEYLESS_MEDIDOS = [
-        ("OVH Llama-70B (sem chave)", "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1", "Meta-Llama-3_3-70B-Instruct", 0.8),
-        ("OVH Mistral-Nemo (sem chave)", "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1", "Mistral-Nemo-Instruct-2407", 0.6),
-        ("g4f lightning (sem chave)", "https://nvidia.g4f.dev/v1", "nvidia/nemotron-3.5-lightning-30b-a3b", 1.7),
-        ("Pollinations openai-fast (sem chave)", "https://text.pollinations.ai/openai", "openai-fast", 2.1),
+        ("g4f auto (sem chave)", "https://nvidia.g4f.dev/v1", "auto", 1.0),
+        ("g4f lightning (sem chave)", "https://nvidia.g4f.dev/v1", "nvidia/nemotron-3.5-lightning-30b-a3b", 4.1),
+        ("Pollinations openai-fast (sem chave)", "https://text.pollinations.ai/openai", "openai-fast", 0.3),
     ]
     for _i, (_nome, _base, _modelo, _s) in enumerate(KEYLESS_MEDIDOS):
         provedores.append({"nome": _nome, "id": f"keyless{_i + 1}", "tipo": "openai",
@@ -3227,7 +3229,8 @@ def montar_provedores():
     for i, (nome, base, modelo) in enumerate(MUNDIAIS):
         # OVH Llama-70B/Mistral-Nemo foram MEDIDOS em 25/10 (0,8 s e 0,6 s): saem do
         # canto do comitê e passam a valer como motor comum. O resto segue como reserva.
-        _provado = nome in ("OVH Llama-70B", "OVH Mistral-Nemo")
+        # OVH mede 403 do runner (bloqueio por IP): fica no comitê, como reserva de janela.
+        _provado = False
         provedores.append({"nome": nome, "id": f"mundial{i + 1}", "tipo": "openai",
                            "base": base, "chave": "unused", "modelos": [modelo],
                            "modelo": modelo, "timeout": 45, "so_comite": not _provado})
