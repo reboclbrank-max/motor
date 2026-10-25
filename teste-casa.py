@@ -301,5 +301,24 @@ try:
 finally:
     os.chdir(_orig); shutil.rmtree(_tmp, ignore_errors=True)
 
+# 17. camada de DADOS: o que a casa sabe entra no prompt sem depender de motor
+import dados as D_
+ok("a camada de dados acha o número medido nos arquivos da casa",
+   any("45" in l and "itch" in l.lower() for _f, l in D_.procurar("quantos downloads o itch teve")),
+   str(D_.procurar("quantos downloads o itch teve"))[:160])
+ok("acha também seguidores do bluesky",
+   any("34" in l for _f, l in D_.procurar("quantos seguidores o bluesky tem")))
+_ctx = D_.montar_contexto("quantos downloads o itch teve e quantos seguidores no bluesky")
+ok("o contexto sai formatado com fonte e aviso de não inventar",
+   _ctx.startswith("FATOS DA CASA") and "[" in _ctx and "não invente" in _ctx)
+ok("o contexto respeita o teto de tamanho", len(_ctx) <= 1300, f"{len(_ctx)} chars")
+ok("pergunta sem relação devolve vazio (não inventa contexto)",
+   D_.montar_contexto("xilofone pantográfico quântico") == "")
+ok("pergunta vazia devolve vazio", D_.montar_contexto("") == "")
+fonte_resp = open(os.path.join(RAIZ, "responder.py"), encoding="utf-8").read()
+ok("a camada de dados é usada ANTES de chamar o motor",
+   "texto_com_dados" in fonte_resp
+   and fonte_resp.index("camada de dados") < fonte_resp.index("C.pensar_bem(pergunta_pensar"))
+
 print("\n%d/%d verificações do estado da casa passaram" % (certos, certos + falhas))
 raise SystemExit(1 if falhas else 0)

@@ -698,13 +698,33 @@ def principal():
                           "As janelas dos motores estão fechadas — tenta de novo em minutos.", marca)
             return 0
 
+        # DADOS DA CASA: antes de qualquer motor, o que a casa já sabe entra no prompt.
+        # Motivo: motor pequeno COM o fato certo acerta; motor grande SEM contexto inventa.
+        # A recuperação lê os arquivos (memória, placar, medições) e não depende de API.
+        texto_com_dados = texto
+        try:
+            import dados as _dados
+            _ctx = _dados.montar_contexto(texto)
+            if _ctx:
+                texto_com_dados = _ctx + "\n\nPergunta do dono: " + texto
+                C.log(f"camada de dados: {_ctx.count(chr(10))} fato(s) da casa no prompt")
+        except Exception as e:
+            C.log(f"camada de dados não usou nada ({str(e)[:90]})")
+
         # modo "pensar bem": comando explícito "pensar: ..." ou pergunta complexa →
         # 2 motores respondem e um juiz escreve a versão final (v3.14, cérebro)
         pergunta_pensar = ""
         if texto.lstrip().lower().startswith("pensar:"):
             pergunta_pensar = texto.split(":", 1)[1].strip()
+            try:
+                import dados as _d
+                _c = _d.montar_contexto(pergunta_pensar)
+                if _c:
+                    pergunta_pensar = _c + "\n\nPergunta do dono: " + pergunta_pensar
+            except Exception:
+                pass
         elif C._pergunta_complexa(texto):
-            pergunta_pensar = texto
+            pergunta_pensar = texto_com_dados
         resposta, motor_nome, usos, erro = None, None, None, None
         resposta_falha = False
         if pergunta_pensar:
@@ -726,7 +746,7 @@ def principal():
             preferido = C.escolher_motor(categoria)
             if preferido:
                 C.log(f"orquestrador: categoria '{categoria}' → motor preferido '{preferido}'")
-            historico = C.historico_da_conversa(numero) + [{"role": "user", "content": texto}]
+            historico = C.historico_da_conversa(numero) + [{"role": "user", "content": texto_com_dados}]
             resposta, motor_nome, usos, erro = C.responder_com_ferramentas(historico, numero, preferir=preferido)
 
             if resposta is None:
