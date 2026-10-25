@@ -94,6 +94,11 @@ C.chamar_llm = fake_juiz_ruim
 tf2, info2 = C.pensar_bem("explique quantum", "sys")
 check("juiz que vaza veredicto é descartado", tf2 == "resposta original util")
 check("o rótulo avisa que o juiz foi descartado", "juiz descartado" in (info2 or ""))
+
+# devolve o dublê original: os testes seguintes dependem dele, e a contagem recomeça
+C.chamar_llm = fake_chamar
+chamadas.clear()
+C.pensar_bem("explique quantum", "sys")
 check("pensar_bem chamou 3x (2 motores + juiz)", len(chamadas) == 3)
 check("pensar_bem exclui o 1º motor no 2º", chamadas[1][1] == ("Motor 1",))
 
@@ -147,6 +152,13 @@ def fake_com_recusa(p, mensagens, system):
         return "Não posso ajudar com isso."
     return f"resposta livre de {p['nome']}"
 
+
+# Desde 25/10/2026 a cadeia aplica RODÍZIO: quem foi usado por último vai para o fim.
+# Estes testes verificam ordem e recusa, então o rodízio é zerado (fixture), senão a ordem
+# depende do histórico de execuções anteriores.
+import rodizio as _R
+_R._carregar = lambda: {}
+_R._salvar = lambda d: None
 
 C._chamar_provedor = fake_com_recusa
 t, m, e = C.chamar_llm([{"role": "user", "content": "oi"}])

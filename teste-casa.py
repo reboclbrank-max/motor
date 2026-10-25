@@ -447,5 +447,11 @@ _scripts = ["checkup", "sentinela", "relatorio", "estudo", "oficina", "digestao"
 _faltando_s = [x for x in _scripts if not os.path.exists(os.path.join(RAIZ, f"{x}.py"))]
 ok("os scripts que os robôs usam estão presentes", not _faltando_s, str(_faltando_s))
 
+# 24. o juiz não pode ser confundido com resposta legítima que fala de juiz
+ok("resposta legítima que menciona juiz NÃO é descartada",
+   not C_.parece_veredicto("O juiz do tribunal decidiu que o réu é inocente."))
+ok("veredicto de verdade continua sendo descartado",
+   C_.parece_veredicto("**Veredicto** Resposta A venceu"))
+
 print("\n%d/%d verificações do estado da casa passaram" % (certos, certos + falhas))
 raise SystemExit(1 if falhas else 0)

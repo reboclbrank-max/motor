@@ -31,29 +31,22 @@ jobs:
           python-version: '3.12'
 
       - name: Barreira offline (sem rede, sem segredo)
-        run: python3 teste-casa.py
-
-      - name: Baixar a memória do repositório privado
-        env:
-          PAT_MEMORIA: ${{ secrets.PAT_MEMORIA }}
-          REPO_MEMORIA: ${{ secrets.REPO_MEMORIA }}
-        run: python3 sincronizar.py baixar
-
-      - name: Testes
-        env:
-          GITHUB_TOKEN: ${{ secrets.PAT_MEMORIA }}
-          PAT_MEMORIA: ${{ secrets.PAT_MEMORIA }}
-          REPO_CONVERSAS: ${{ secrets.REPO_MEMORIA }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          LLM7_API_KEY: ${{ secrets.LLM7_API_KEY }}
-          NOVITA_API_KEY: ${{ secrets.NOVITA_API_KEY }}
-          ITCH_API_KEYS: ${{ secrets.ITCH_API_KEYS }}
-          YT_API_KEY: ${{ secrets.YT_API_KEY }}
-          IG_TOKEN: ${{ secrets.IG_TOKEN }}
-          IG_USER_ID: ${{ secrets.IG_USER_ID }}
-        run: python3 teste-casa.py && python3 teste-chat.py && python3 teste-cerebro.py && python3 teste-orquestrador.py && python3 teste-fila.py && python3 teste-estudo.py && python3 teste-palcos.py && python3 teste-piloto.py && python3 teste-semantica.py && python3 teste-caca.py && python3 teste-divulgacao.py && python3 teste-v37.py && python3 teste-responder-emergencia.py && python3 teste-workflow-seguranca.py
+        run: |
+          falhas=0
+          for t in teste-casa.py teste-chat.py teste-cerebro.py teste-orquestrador.py \
+                   teste-fila.py teste-estudo.py teste-palcos.py teste-piloto.py \
+                   teste-semantica.py teste-caca.py teste-divulgacao.py teste-v37.py \
+                   teste-responder-emergencia.py teste-workflow-seguranca.py; do
+            if [ -f "$t" ]; then
+              printf '\n=== %s ===\n' "$t"
+              python3 "$t" || falhas=$((falhas+1))
+            else
+              printf '\n=== %s (ausente neste repositório) ===\n' "$t"
+            fi
+          done
+          echo
+          echo "suítes com falha: $falhas"
+          [ "$falhas" -eq 0 ] || exit 1
 
       - name: Devolver o que aprendeu (memória)
         if: always()

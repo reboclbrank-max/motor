@@ -4188,7 +4188,8 @@ def marcar_ultima_resposta_ruim(numero):
 
 
 RE_VEREDICTO = re.compile(
-    r"(resposta\s+[ab]\b|veredicto|vencedora|\bjuiz\b|as duas respostas|"
+    # "juiz" sozinho NÃO entra: resposta legítima pode falar de juiz (justiça, tribunal).
+    r"(resposta\s+[ab]\b|veredicto|vencedora|as duas respostas|"
     r"portanto,? a resposta|melhor resposta|ambas (?:as )?respostas|"
     r"explica[çc][ãa]o:.*interrompida|n[ãa]o inclui a resposta)",
     re.IGNORECASE)
