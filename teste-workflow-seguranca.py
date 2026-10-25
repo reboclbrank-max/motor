@@ -43,6 +43,7 @@ PERMISSOES_ESPERADAS = {
     "testes.yml": {"contents": "read"},
     "varredura-motores.yml": {"contents": "read"},
     "vitrine.yml": {"contents": "read"},
+    "exatidao.yml": {"contents": "read"},
     "prova-de-fogo.yml": {"contents": "read"},
     "testa-ferramentas.yml": {"contents": "read"},
 }

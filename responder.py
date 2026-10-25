@@ -586,6 +586,22 @@ def principal():
 
         baixo = texto.lower().strip()
 
+        # EXATIDÃO PRIMEIRO: conta, data, conversão e porcentagem não passam por motor.
+        # Fica aqui, no começo do fluxo, para valer também no "pensar:" e em qualquer atalho
+        # que venha antes da conversa normal. Modelo pequeno erra aritmética (medido) e o
+        # motor forte da casa é um só — número verificável não depende de nenhum dos dois.
+        try:
+            import exatidao as _exa
+            _resposta_exata = _exa.responder(texto)
+            if _resposta_exata and not re.match(r"^\s*/?(ajuda|help|status|comandos)\b", baixo):
+                C.log("pergunta conferível — respondida na camada de exatidão, sem motor")
+                responder(numero, _resposta_exata, marca,
+                          extra="_(⏱ 0 s · conta da casa, sem passar por modelo)_")
+                C.registrar_conversa(numero, texto, _resposta_exata, "exatidão local")
+                return 0
+        except Exception as e:
+            C.log(f"exatidão no começo do fluxo não usada ({str(e)[:70]})")
+
         # Estado real da casa: atualiza a fotografia que o cérebro verá no prompt e
         # autoriza (ou não) ação de publicação por esta mensagem do dono.
         try:
@@ -805,6 +821,17 @@ def principal():
                 return 0
         except Exception as e:
             C.log(f"resposta direta não usada ({str(e)[:80]})")
+        # EXATIDÃO SEM MOTOR: conta, data, conversão e porcentagem saem daqui, exatas.
+        # Modelo pequeno erra aritmética (medido), e o motor forte da casa é um só. Conta
+        # não é tarefa de linguagem: não passa por modelo nenhum.
+        try:
+            import exatidao as _ex
+            _exata = _ex.responder(texto)
+            if _exata:
+                responder(numero, _exata, marca)
+                return 0
+        except Exception as e:
+            C.log(f"exatidão não usada ({str(e)[:80]})")
         try:
             import dados as _dados
             _ctx = _dados.montar_contexto(texto)
@@ -850,7 +877,16 @@ def principal():
             if preferido:
                 C.log(f"orquestrador: categoria '{categoria}' → motor preferido '{preferido}'")
             historico = C.historico_da_conversa(numero) + [{"role": "user", "content": texto_com_dados}]
-            resposta, motor_nome, usos, erro = C.responder_com_ferramentas(historico, numero, preferir=preferido)
+            _preciso = False
+            try:
+                import exatidao as _exp
+                _preciso = _exp.precisa_exatidao(texto)
+                if _preciso:
+                    C.log("pergunta exige exatidão — usando a ordem medida no desafio")
+            except Exception:
+                _preciso = False
+            resposta, motor_nome, usos, erro = C.responder_com_ferramentas(
+                historico, numero, preferir=preferido, preciso=_preciso)
 
             if resposta is None:
                 resposta = modo_direto(texto)
@@ -874,6 +910,20 @@ def principal():
                         "(ou reenvie com outras palavras) que eu respondo.")
             motor_nome = None
             resposta_falha = True
+
+        if resposta and pergunta_pensar == "":
+            # CONFERÊNCIA DE NÚMERO: quando a pergunta pede conta, o número do modelo é
+            # conferido contra a conta exata. Se divergir, vale a conta — é o que impede
+            # o motor fraco (que assume quando o forte cai) de inventar aritmética.
+            try:
+                import exatidao as _exc
+                _ok, _corrigida = _exc.conferir(texto, resposta)
+                if not _ok:
+                    C.log(f"número do motor ({motor_nome}) não bateu com a conta — corrigido")
+                    resposta = _corrigida
+                    motor_nome = f"{motor_nome or 'motor'} → conferido pela casa"
+            except Exception as e:
+                C.log(f"conferência de número não usada ({str(e)[:70]})")
 
         if resposta:
             resposta, usos_extras = executar_comandos_soltos(resposta)

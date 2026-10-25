@@ -3066,6 +3066,35 @@ def executar_ferramenta(tipo, argumento):
 
 # ================================================================ motores
 
+def _ranking_exatidao():
+    """Ordem dos motores por nota no desafio de exatidão (medida, não opinião).
+
+    Lê MEMORIA/exatidao-motores.json. Arquivo ausente devolve {} e a cadeia segue na ordem
+    de sempre — nunca quebra por falta de medida.
+    """
+    try:
+        dados = json.loads(ler_remoto("MEMORIA/exatidao-motores.json", "{}") or "{}")
+        ranking = dados.get("ranking") or []
+        return {item.get("motor"): int(item.get("acertos") or 0) for item in ranking if item.get("motor")}
+    except Exception:
+        return {}
+
+
+def ordenar_por_exatidao(provedores):
+    """Motor com nota alta vai na frente; sem nota fica atrás, na ordem original.
+
+    Usado quando a pergunta tem número/conta e errar custa caro. Não descarta ninguém:
+    reordena. Se o melhor estiver fora, o próximo com nota assume.
+    """
+    notas = _ranking_exatidao()
+    if not notas:
+        return provedores
+    def chave(item):
+        indice, prov = item
+        return (-notas.get(prov.get("nome"), -1), indice)
+    return [prov for _, prov in sorted(enumerate(provedores), key=chave)]
+
+
 def montar_provedores():
     # relé opcional: se o dono publicou o relé (rele-deno.js), os robôs atiram com o IP DELE
     BASE_LLM7 = (os.environ.get("RELE_LLM7") or "https://api.llm7.io/v1").rstrip("/")
@@ -3509,12 +3538,18 @@ def _parece_recusa(texto):
     return bool(_RECUSA_RE.search(t))
 
 
-def chamar_llm(mensagens, system=None, forcar_teste=False, preferir=None, excluir=()):
+def chamar_llm(mensagens, system=None, forcar_teste=False, preferir=None, excluir=(),
+               preciso=False):
     """Tenta os motores na ordem, trocando automaticamente quando um falha.
+
     `preferir` coloca um motor no topo (orquestrador); `excluir` tira motores da fila.
+    `preciso=True` reordena pela NOTA do desafio de exatidão: quando a pergunta tem número
+    e errar custa caro, quem acerta mais responde primeiro — medido, não suposto.
     Devolve (texto, provedor_usado, erro_final)."""
     system = system if system is not None else ""
     provedores = [p for p in montar_provedores() if not p.get("so_comite")]
+    if preciso:
+        provedores = ordenar_por_exatidao(provedores)
     if excluir:
         provedores = [p for p in provedores if p["nome"] not in excluir]
     if not provedores:
@@ -4019,7 +4054,7 @@ def historico_da_conversa(numero, pular_id=None):
     return list(reversed(recorte))
 
 
-def responder_com_ferramentas(historico, numero=None, preferir=None):
+def responder_com_ferramentas(historico, numero=None, preferir=None, preciso=False):
     """Loop: o motor pode pedir ferramentas antes de responder. Antes da primeira
     chamada: (a) se o dono ensinou algo, a lição vira permanente; (b) se a pergunta é
     factual, busca na internet e injeta o contexto (resposta com fatos ao vivo)."""
@@ -4054,7 +4089,7 @@ def responder_com_ferramentas(historico, numero=None, preferir=None):
         except Exception as e:
             log(f"chão de fatos falhou: {str(e)[:80]}")
     for _ in range(MAX_RODADAS_FERRAMENTA):
-        texto, motor_nome, erro = chamar_llm(conversa, system, preferir=preferir)
+        texto, motor_nome, erro = chamar_llm(conversa, system, preferir=preferir, preciso=preciso)
         if texto is None:
             return None, motor_nome, usos, erro
         achado = RE_FERRAMENTA.search(texto)
@@ -4074,7 +4109,7 @@ def responder_com_ferramentas(historico, numero=None, preferir=None):
         ]
     texto, motor_nome, erro = chamar_llm(conversa + [
         {"role": "user", "content": "Responda agora usando o que já tem, sem pedir mais ferramentas."}], system,
-        preferir=preferir)
+        preferir=preferir, preciso=preciso)
     if texto is None:
         return None, motor_nome, usos, erro
     return remover_marcador(RE_FERRAMENTA.sub("", texto)), motor_nome, usos, None

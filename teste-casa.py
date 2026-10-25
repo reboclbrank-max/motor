@@ -495,5 +495,19 @@ ok("há pelo menos 4 sem-chave vigiados",
 _fonte_comum2 = open("comum.py", encoding="utf-8").read()
 ok("o cérebro usa os sem-chave medidos", "KEYLESS_MEDIDOS" in _fonte_comum2)
 
+# 29. exatidão: conta não depende de motor, e o motor não pode inventar número
+ok("exatidao.py existe", os.path.exists("exatidao.py"))
+ok("exatidao tem teste próprio", os.path.exists("teste-exatidao.py"))
+ok("workflow do desafio de exatidão existe", os.path.exists(".github/workflows/exatidao.yml"))
+if os.path.exists("exatidao.py"):
+    import exatidao as _EX
+    ok("conta exata sai sem motor", "33.033" in (_EX.responder("quanto é 847 * 39?") or ""))
+    ok("número errado de motor é corrigido pela conta",
+       _EX.conferir("quanto é 847 * 39", "são 33.000")[0] is False)
+    ok("pergunta aberta não é sequestrada", _EX.responder("qual a capital da Austrália?") is None)
+_fonte_desafio = open("desafio_exatidao.py", encoding="utf-8").read()
+ok("desafio cobra honestidade (dizer que não sabe)", "NAO_SEI" in _fonte_desafio)
+ok("cadeia ordena por nota medida", "ordenar_por_exatidao" in open("comum.py", encoding="utf-8").read())
+
 print("\n%d/%d verificações do estado da casa passaram" % (certos, certos + falhas))
 raise SystemExit(1 if falhas else 0)
