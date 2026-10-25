@@ -320,3 +320,8 @@ def medir():
             f"(nota de plantão {melhor['acertos']}/{melhor['total']}: acerto "
             f"{melhor['acerto']}/8, presença {melhor['cobertura']}/8). "
             f"{len(acima)} acima do piso, {mortos} fora do ar.")
+
+
+if __name__ == "__main__":
+    print(medir())
+    sys.exit(0)

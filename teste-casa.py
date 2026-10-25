@@ -564,6 +564,8 @@ if os.path.exists("desafio_exatidao.py"):
     ok("presença conta na nota (calar na metade derruba)", _DX.nota_plantao(4, 4, 8)[0] == 4)
     ok("nota de plantão cobra as duas coisas", _DX.nota_plantao(6, 8, 8)[0] == 6)
     ok("motivo do silêncio é declarado, não suposto", hasattr(_DX, "erro_de_portaria"))
+    _fdx = open("desafio_exatidao.py", encoding="utf-8").read()
+    ok("o desafio tem porta de entrada (__main__)", "print(medir())" in _fdx)
 
 print("\n%d/%d verificações do estado da casa passaram" % (certos, certos + falhas))
 raise SystemExit(1 if falhas else 0)

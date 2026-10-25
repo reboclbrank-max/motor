@@ -96,6 +96,9 @@ checar("quem calou no meio ganha segunda passada", "segunda passada" in _fonte)
 checar("motor com porta fechada não gasta as 8 perguntas", "erro_de_portaria(erro)" in _fonte)
 checar("a rodada tem prazo declarado", "PRAZO_MINUTOS" in _fonte)
 checar("a medição guarda o motivo do silêncio", '"motivo": motivo' in _fonte)
+# Erro real desta rodada: a reescrita de medir() levou junto o bloco __main__ e o job
+# "passou" sem medir nada. Barreira que não pega isso não serve.
+checar("o desafio roda quando é chamado direto", "__main__" in _fonte and "print(medir())" in _fonte)
 
 print("\nteste-exatidao:", "PASSOU" if ok else "FALHOU")
 sys.exit(0 if ok else 1)
