@@ -414,5 +414,17 @@ fonte_resp = open(os.path.join(RAIZ, "responder.py"), encoding="utf-8").read()
 ok("a resposta direta vem antes do motor",
    fonte_resp.index("resposta_direta") < fonte_resp.index("C.pensar_bem(pergunta_pensar"))
 
+# 22. dado de máquina (JSON) não vira resposta de fato
+_LIXO = [("MEMORIA/cache.json", '{"itens": ["https://a.com", "https://b.com"], "quando": "x"}'),
+         ("MEMORIA/estado-casa.md", "- itch: downloads: alvo 100 · observado 45 · falta 55 · EM_CURSO")]
+_orig3 = D_._linhas_da_casa
+D_._linhas_da_casa = lambda: list(_LIXO)
+try:
+    _rd = D_.resposta_direta("quantos downloads o itch tem?")
+    ok("linha de JSON não aparece na resposta", _rd and '"itens"' not in _rd, str(_rd)[:120])
+    ok("a resposta ainda traz a medição certa", _rd and "observado 45" in _rd)
+finally:
+    D_._linhas_da_casa = _orig3
+
 print("\n%d/%d verificações do estado da casa passaram" % (certos, certos + falhas))
 raise SystemExit(1 if falhas else 0)

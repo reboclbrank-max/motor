@@ -229,6 +229,32 @@ def cacar_cmd():
         return f"⚠️ Não consegui disparar a caçada agora: `{str(e)[:120]}`"
 
 
+def robos_cmd(filtro=""):
+    """Saúde dos robôs. Lê o repositório que REALMENTE roda (motor), não o privado parado."""
+    filtro = (filtro or "").strip().lower()
+    import urllib.request as _u
+    try:
+        tok = os.environ.get("GITHUB_TOKEN") or os.environ.get("PAT_MEMORIA") or ""
+        req = _u.Request("https://api.github.com/repos/reboclbrank-max/motor/actions/workflows",
+                         headers={"Authorization": "Bearer " + tok,
+                                  "Accept": "application/vnd.github+json"})
+        with _u.urlopen(req, timeout=40) as r:
+            fluxos = json.loads(r.read().decode()).get("workflows", [])
+    except Exception as e:
+        return f"⚠️ Não consegui ler os robôs agora: `{str(e)[:120]}`"
+    if filtro:
+        fluxos = [f for f in fluxos if filtro in (f.get("name") or "").lower()]
+    if not fluxos:
+        return f"Nenhum robô corresponde a \"{filtro}\"."
+    linhas = ["**Robôs do motor (repositório público, minutos ilimitados)**", ""]
+    for f in fluxos:
+        estado = "🟢 ativo" if f.get("state") == "active" else "⚪ " + str(f.get("state"))
+        linhas.append(f"- **{f.get('name')}** — {estado}")
+    linhas.append("")
+    linhas.append("_São estes que rodam. Os 32 do repositório privado seguem parados pela cota._")
+    return "\n".join(linhas)
+
+
 def local_cmd(pergunta):
     """Responde usando SÓ o motor local (roda na CPU do runner, sem chave e sem cota).
 
@@ -717,7 +743,7 @@ def principal():
             (r"^[!/]?(?:plantar)\s*:?\s*(.+)$", "🌱", "plantar motor", C._ferramenta_plantar),
             (r"^[!/]?(?:espiar)\s*:?\s*(.+)$", "🔭", "espiar arquivo da casa", C._ferramenta_espiar),
             (r"^[!/]?(?:repo|arquivo\s+do\s+repo)\s*:?\s*([\w-]+/\S+)$", "📂", "arquivo de repositório", C._ferramenta_repo),
-            (r"^[!/]?(?:acoes|ações|robos|robôs)\s*:?\s*(.*)$", "🤖", "saúde dos robôs", C._ferramenta_acoes),
+            (r"^[!/]?(?:acoes|ações|robos|robôs)\s*:?\s*(.*)$", "🤖", "saúde dos robôs", robos_cmd),
             (r"^[!/]?(?:ghbusca|github\s+busca|buscar\s+repo)\s*:?\s+(.+)$", "🐙", "busca no GitHub", C._ferramenta_ghsearch),
             (r"^/?(?:melhorias)\s*:?\s*$", "", "melhorias", lambda _a: C.ferramenta_melhorias()),
             (r"^/?(?:panorama|resumir)\s*:?\s*$", "", "panorama",

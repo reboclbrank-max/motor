@@ -55,7 +55,9 @@ def _linhas_da_casa():
     for pasta in pastas:
         try:
             for nome in sorted(os.listdir(pasta)):
-                if not nome.endswith((".md", ".json")):
+                # SÓ .md: arquivo .json é estado de máquina, não fato para o dono. A issue #42
+                # respondeu com um bloco {"itens": [...]} de cache porque eu lia .json aqui.
+                if not nome.endswith(".md"):
                     continue
                 caminho = os.path.join(pasta, nome)
                 try:
@@ -64,8 +66,12 @@ def _linhas_da_casa():
                     with open(caminho, encoding="utf-8", errors="replace") as f:
                         for linha in f:
                             linha = linha.strip()
-                            if len(linha) >= MIN_LINHA:
-                                itens.append((f"{pasta}/{nome}", linha))
+                            if len(linha) < MIN_LINHA or len(linha) > 300:
+                                continue
+                            # linha de JSON/estrutura não é fato legível
+                            if linha[0] in "{[<" or linha.count('"') > 4:
+                                continue
+                            itens.append((f"{pasta}/{nome}", linha))
                 except Exception:
                     continue
         except Exception:
@@ -166,7 +172,9 @@ def resposta_direta(pergunta):
     if not RE_CONSULTA.search(pergunta):
         return None
     achados = procurar(pergunta, k=6)
-    uteis = [(f, l) for f, l in achados if RE_MEDIDA.search(l) and re.search(r"\d", l)]
+    uteis = [(f, l) for f, l in achados
+             if RE_MEDIDA.search(l) and re.search(r"\d", l)
+             and l[0] not in "{[<" and len(l) <= 300 and l.count('"') <= 2]
     if not uteis:
         return None
     linhas = ["**Do que está medido** (lido dos arquivos agora, sem passar por modelo):", ""]
