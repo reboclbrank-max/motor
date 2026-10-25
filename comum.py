@@ -104,10 +104,12 @@ ZAI_KEY = _k("ZAI_API_KEY")
 SAMBA_KEY = _k("SAMBANOVA_API_KEY")
 GLAMA_KEY = _k("GLAMA_API_KEY")
 UPSTAGE_KEY = _k("UPSTAGE_API_KEY")
+NVIDIA_KEY = _k("NVIDIA_API_KEY")
 OLLAMA_KEY = _k("OLLAMA_API_KEY")
 
 GEMINI_MODELO = os.environ.get("GEMINI_MODELO", "gemini-2.5-flash").strip()
-GROQ_MODELO = os.environ.get("GROQ_MODELO", "llama-3.3-70b-versatile").strip()
+# llama-3.3-70b-versatile foi descontinuado (a prova de fogo pegou 400 em 25/10).
+GROQ_MODELO = os.environ.get("GROQ_MODELO", "").strip()
 OPENROUTER_MODELO = os.environ.get("OPENROUTER_MODELO", "").strip()
 HUGGINGFACE_MODELO = os.environ.get("HUGGINGFACE_MODELO", "Qwen/Qwen3-235B-A22B-Instruct-2507").strip()
 CEREBRAS_MODELO = os.environ.get("CEREBRAS_MODELO", "qwen-3-235b-a22b-instruct-2507").strip()
@@ -3077,7 +3079,7 @@ def montar_provedores():
                                "base": "https://generativelanguage.googleapis.com", "chave": chave,
                                "modelos": modelos, "modelo": modelos[0], "timeout": 90})
     if GROQ_KEY:
-        modelos = [GROQ_MODELO] if GROQ_MODELO else ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
+        modelos = [GROQ_MODELO] if GROQ_MODELO else ["llama-3.1-8b-instant", "llama-3.3-70b-versatile"]
         for i, chave in enumerate([k.strip() for k in GROQ_KEY.split(",") if k.strip()]):
             sufixo = f" #{i + 1}" if i else ""
             provedores.append({"nome": f"Groq ({modelos[0]}){sufixo}", "id": f"groq{i + 1}", "tipo": "openai",
@@ -3129,11 +3131,20 @@ def montar_provedores():
         provedores.append({"nome": "Glama (Claude Sonnet-5.5)", "id": "glama", "tipo": "openai",
                            "base": "https://glama.ai/api/gateway/openai/v1", "chave": GLAMA_KEY,
                            "modelos": ["anthropic/claude-sonnet-5.5"], "modelo": "anthropic/claude-sonnet-5.5", "timeout": 90})
+    # NVIDIA com chave (25/10): a prova de fogo achou viva; a base nvidia.g4f.dev do
+    # código antigo nem respondia. A oficial é integrate.api.nvidia.com.
+    if NVIDIA_KEY:
+        _mod_nv = [m.strip() for m in os.environ.get(
+            "NVIDIA_MODELOS", "meta/llama-3.3-70b-instruct,meta/llama-3.1-8b-instruct").split(",") if m.strip()]
+        provedores.append({"nome": "NVIDIA (chave)", "id": "nvidia-chave", "tipo": "openai",
+                           "base": "https://integrate.api.nvidia.com/v1", "chave": NVIDIA_KEY,
+                           "modelos": _mod_nv, "modelo": _mod_nv[0], "timeout": 120})
     # Upstage (chave do dono, 12/10): solar-pro2 provado com conteúdo, CORS:* (lote 4)
     if UPSTAGE_KEY:
         provedores.append({"nome": "Upstage (Solar-Pro2)", "id": "upstage", "tipo": "openai",
                            "base": "https://api.upstage.ai/v1/solar", "chave": UPSTAGE_KEY,
-                           "modelos": ["solar-pro2-251215"], "modelo": "solar-pro2-251215", "timeout": 60})
+                           "modelos": ["solar-pro2-251215", "solar-pro", "solar-mini"],
+                           "modelo": "solar-pro2-251215", "timeout": 60})
 
     provedores.append({"nome": "Pollinations (último recurso)", "id": "pollinations-get", "tipo": "pollinations-get",
                        "base": "https://text.pollinations.ai", "chave": "sem-chave", "modelo": "openai-fast",
