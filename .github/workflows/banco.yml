@@ -1,0 +1,57 @@
+name: banco (fatos da casa)
+
+# Portado do repositório privado, onde a cota de Actions estourou e o robô ficou parado.
+# Repositório público tem minutos ilimitados, então ele volta a rodar de graça.
+#
+# O QUE ELE FAZ: mantém MEMORIA/banco.json fresco com clima, câmbio, status dos sites e os
+# números das conversas/execuções — tudo por fontes que NÃO pedem chave (wttr.in,
+# open.er-api.com, API do GitHub).
+#
+# POR QUE IMPORTA: a camada `dados.py` responde consulta de número lendo os arquivos. Sem o
+# banco atualizado ela responde com dado velho. Este robô é o que mantém o dado fresco sem
+# gastar uma única chamada de modelo.
+
+on:
+  schedule:
+    # De hora em hora, no minuto 20 (fora do minuto cheio, onde há mais fila no GitHub).
+    - cron: '20 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: banco-casa
+  cancel-in-progress: false
+
+jobs:
+  atualizar:
+    if: github.event_name == 'schedule' || github.actor == 'reboclbrank-max'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Baixar a memória
+        env:
+          PAT_MEMORIA: ${{ secrets.PAT_MEMORIA }}
+          REPO_MEMORIA: ${{ secrets.REPO_MEMORIA }}
+        run: python3 sincronizar.py baixar
+      - name: Atualizar o banco de fatos
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_MEMORIA }}
+          PAT_MEMORIA: ${{ secrets.PAT_MEMORIA }}
+          REPO_CONVERSAS: ${{ secrets.REPO_MEMORIA }}
+          ITCH_API_KEYS: ${{ secrets.ITCH_API_KEYS }}
+          YT_API_KEY: ${{ secrets.YT_API_KEY }}
+          IG_TOKEN: ${{ secrets.IG_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+        run: python3 banco.py
+      - name: Devolver o banco para o privado
+        if: always()
+        env:
+          PAT_MEMORIA: ${{ secrets.PAT_MEMORIA }}
+          REPO_MEMORIA: ${{ secrets.REPO_MEMORIA }}
+        run: python3 sincronizar.py subir
