@@ -3108,7 +3108,9 @@ def montar_provedores():
                                "base": "https://generativelanguage.googleapis.com", "chave": chave,
                                "modelos": modelos, "modelo": modelos[0], "timeout": 90})
     if GROQ_KEY:
-        modelos = [GROQ_MODELO] if GROQ_MODELO else ["llama-3.1-8b-instant", "llama-3.3-70b-versatile"]
+        # allam-2-7b foi o modelo que a prova de fogo ACHOU vivo na chave do dono em 25/10;
+        # os llama vinham dando 400/403 com a mesma chave.
+        modelos = [GROQ_MODELO] if GROQ_MODELO else ["allam-2-7b", "llama-3.1-8b-instant", "llama-3.3-70b-versatile"]
         for i, chave in enumerate([k.strip() for k in GROQ_KEY.split(",") if k.strip()]):
             sufixo = f" #{i + 1}" if i else ""
             provedores.append({"nome": f"Groq ({modelos[0]}){sufixo}", "id": f"groq{i + 1}", "tipo": "openai",
