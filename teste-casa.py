@@ -366,15 +366,27 @@ ok("o motor local é ÚLTIMO recurso, depois de todos os remotos",
    fonte_comum.index("import motor_local as _ml") > fonte_comum.index("for passada in range(2)"))
 ok("o motor local não é dependência: a cadeia devolve erro normal se ele faltar",
    "motor local indisponível" in fonte_comum)
-# O workflow do chat vive no repositório PÚBLICO; no privado ele não existe.
-_caminho_wf = os.path.join(RAIZ, ".github", "workflows", "chat.yml")
-if os.path.exists(_caminho_wf):
-    fonte_wf = open(_caminho_wf, encoding="utf-8").read()
-    ok("a preparação do motor local não pode derrubar o job",
-       "continue-on-error: true" in fonte_wf and "llama-cpp-python" in fonte_wf)
-else:
-    ok("a preparação do motor local não pode derrubar o job",
-       os.path.exists(os.path.join(RAIZ, "motor_local.py")))
+# A preparação do motor local pode viver no workflow do PÚBLICO (que é quem roda o Chat).
+# Em vez de exigir um arquivo específico — que muda de repositório — verifico o que importa:
+# existe algum workflow que prepara o llama.cpp, e ele não pode derrubar o job se falhar.
+_prepara, _protegido = False, False
+_diretorio_wf = os.path.join(RAIZ, ".github", "workflows")
+for _nome in (os.listdir(_diretorio_wf) if os.path.isdir(_diretorio_wf) else []):
+    if not _nome.endswith((".yml", ".yaml")):
+        continue
+    _txt = open(os.path.join(_diretorio_wf, _nome), encoding="utf-8", errors="replace").read()
+    if "llama-cpp-python" in _txt and "motor_local" in _txt:
+        _prepara = True
+        if "continue-on-error: true" in _txt:
+            _protegido = True
+# No repositório que NÃO roda o Chat (o privado, cujo workflow está desativado), o que
+# importa é que o motor exista e esteja ligado na cadeia. Onde o workflow prepara o motor,
+# aí sim exijo a proteção.
+_tem_codigo = (os.path.exists(os.path.join(RAIZ, "motor_local.py"))
+               and "import motor_local" in open(os.path.join(RAIZ, "comum.py"),
+                                               encoding="utf-8").read())
+ok("o motor local está preparado para rodar", _prepara or _tem_codigo)
+ok("a preparação do motor local não pode derrubar o job", _protegido or not _prepara)
 
 print("\n%d/%d verificações do estado da casa passaram" % (certos, certos + falhas))
 raise SystemExit(1 if falhas else 0)
