@@ -72,10 +72,15 @@ def _k(nome, padrao=""):
     for candidato in cadeia:
         if candidato.startswith(PREFIXOS_DE_CHAVE):
             return candidato
-    # Nenhum prefixo reconhecido: só assume decodificação se o original era blob de fato
-    # (padding de base64 e o resultado menor e imprimível).
-    if len(cadeia) > 1 and "=" in bruto:
-        return cadeia[-1]
+    # Sem prefixo conhecido (chave UUID do SambaNova e do Glama são assim): assume a
+    # decodificação quando o texto cru era claramente blob — base64 válido que vira texto
+    # imprimível, sem espaço, com tamanho de credencial. Chave crua de verdade quase nunca
+    # é base64 de texto; quando é, perde-se nada: o valor original continua em `cadeia[0]`.
+    if len(cadeia) > 1:
+        fundo = cadeia[-1]
+        if (len(fundo) >= 16 and fundo.isprintable() and " " not in fundo
+                and ("=" in bruto or len(bruto) > len(fundo))):
+            return fundo
     return bruto
 
 

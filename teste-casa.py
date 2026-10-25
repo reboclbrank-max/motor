@@ -473,5 +473,17 @@ ok("nenhuma chave de motor é lida direto do ambiente",
            ("GROQ_API_KEY", "OPENROUTER_API_KEY", "SAMBANOVA_API_KEY", "UPSTAGE_API_KEY",
             "NOVITA_API_KEY", "GLAMA_API_KEY", "HUGGINGFACE_API_KEY")))
 
+# 27. a porta única das chaves decodifica blob do cofre e preserva chave crua
+import base64 as _b64
+import os as _os
+_blob = _b64.b64encode(_b64.b64encode(b"12345678-90ab-cdef-1234-567890abcdef")).decode()
+_cru = "gsk_chave-crua-que-nao-e-base64"
+_os.environ["CHAVE_DE_TESTE"] = _blob
+ok("_k decodifica blob do cofre (base64 duplo) até virar chave",
+   C_._k("CHAVE_DE_TESTE") == "12345678-90ab-cdef-1234-567890abcdef")
+_os.environ["CHAVE_DE_TESTE"] = _cru
+ok("_k não estraga chave crua", C_._k("CHAVE_DE_TESTE") == _cru)
+_os.environ.pop("CHAVE_DE_TESTE", None)
+
 print("\n%d/%d verificações do estado da casa passaram" % (certos, certos + falhas))
 raise SystemExit(1 if falhas else 0)

@@ -96,7 +96,7 @@ def _modelos_do_catalogo(base, chave, quantos=3, timeout=20):
     return nomes[:quantos]
 
 
-def _bater(base, modelo, chave, timeout=40):
+def _bater(base, modelo, chave, timeout=60):
     """Uma chamada curta. Devolve (estado, detalhe, segundos)."""
     url = base.rstrip("/") + "/chat/completions"
     corpo = json.dumps({"model": modelo, "max_tokens": 12,

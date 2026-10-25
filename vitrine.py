@@ -39,16 +39,37 @@ def _http(metodo, url, cabeceras=None, corpo=None, timeout=30):
 
 
 def _confere_instagram():
-    """GET /me no Graph: confirma token e conta, sem publicar nada."""
+    """Confirma token e conta, sem publicar nada.
+
+    São duas APIs diferentes e o token diz a qual pertence: token IGAA é do Instagram
+    Graph (graph.instagram.com); token EAA é do Graph do Facebook. Perguntar no lugar
+    errado dá "Cannot parse access token" — foi o que fez o Instagram parecer quebrado
+    com um token que funciona.
+    """
     token, uid = C._k("IG_TOKEN"), C._k("IG_USER_ID")
-    if not token or not uid:
-        return "ausente", "IG_TOKEN/IG_USER_ID não configurados"
-    url = ("https://graph.facebook.com/v21.0/" + urllib.parse.quote(uid)
-           + "?fields=username&access_token=" + urllib.parse.quote(token))
-    ok, txt = _http("GET", url)
-    if ok and "username" in txt:
-        return "vivo", f"conta @{txt.split('username')[1].split(':')[1].strip(' \"}')[:40]}"
-    return "falhou", txt
+    if not token:
+        return "ausente", "IG_TOKEN não configurado"
+    tentativas = []
+    if token.startswith("IGAA") or token.startswith("IGQV"):
+        tentativas.append(("instagram", "https://graph.instagram.com/v21.0/me"
+                           "?fields=user_id,username&access_token=" + urllib.parse.quote(token)))
+    if uid:
+        tentativas.append(("facebook", "https://graph.facebook.com/v21.0/"
+                           + urllib.parse.quote(uid)
+                           + "?fields=username&access_token=" + urllib.parse.quote(token)))
+    tentativas.append(("instagram", "https://graph.instagram.com/v21.0/me"
+                       "?fields=user_id,username&access_token=" + urllib.parse.quote(token)))
+    ultimo = "sem tentativa"
+    for api, url in tentativas:
+        ok, txt = _http("GET", url)
+        if ok and "username" in txt:
+            try:
+                nome = txt.split('"username":"')[1].split('"')[0]
+            except Exception:
+                nome = "conta confirmada"
+            return "vivo", f"@{nome} (via {api})"
+        ultimo = txt
+    return "falhou", ultimo
 
 
 def _confere_itch():
