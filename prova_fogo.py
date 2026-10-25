@@ -10,6 +10,7 @@ Regra: uma chamada curta por provedor, com resposta verificável. Não existe "a
 HTTP 200 com corpo vazio conta como MORTO, e resposta sem conteúdo legível conta como
 MORTO. O resultado entra em MEMORIA/prova-fogo.json para o boletim poder citar.
 """
+import base64
 import json
 import os
 import sys
@@ -49,6 +50,34 @@ def _forma(chave):
     if chave.endswith("=") and len(chave) % 4 == 0:
         dica = " · parece base64 (blob do cofre), não chave crua"
     return f"{prefixo}… {len(chave)} caracteres{dica}"
+
+
+def _variantes(chave):
+    """Formas possíveis da chave: crua, e decodificada 1× e 2× de base64.
+
+    O cofre gravava as chaves em base64 duplo. Ao injetar nos secrets do público, o blob
+    foi copiado como estava — e todo provedor devolvia 401 com 'chave' de 104-268
+    caracteres e '=' no fim. Decodificar antes de usar é o que faz a chave voltar a valer.
+    """
+    formas, vistas = [], set()
+
+    def juntar(rotulo, valor):
+        if valor and valor not in vistas:
+            vistas.add(valor)
+            formas.append((rotulo, valor))
+
+    juntar("crua", chave)
+    atual = chave
+    for rotulo in ("base64", "base64×2"):
+        try:
+            bruto = base64.b64decode(atual, validate=True)
+            atual = bruto.decode("utf-8")
+        except Exception:
+            break
+        # chave de verdade é imprimível e não termina em '=' (isso é padding de blob)
+        if atual and atual.isprintable() and not atual.endswith("="):
+            juntar(rotulo, atual)
+    return formas
 
 
 def _bater(base, modelo, chave, timeout=40):
@@ -93,12 +122,19 @@ def disparar():
             resultado[nome] = {"estado": "sem chave", "detalhe": f"{var} não configurada"}
             continue
         testados += 1
-        estado, detalhe, gasto = _bater(base, modelo, chave)
+        estado, detalhe, gasto, forma_usada = "morto", "", 0.0, "crua"
+        for rotulo, candidata in _variantes(chave):
+            estado, detalhe, gasto = _bater(base, modelo, candidata)
+            forma_usada = rotulo
+            if estado == "vivo":
+                break
         resultado[nome] = {"estado": estado, "detalhe": detalhe, "modelo": modelo,
-                           "segundos": gasto, "forma_da_chave": _forma(chave)}
+                           "segundos": gasto, "forma_da_chave": _forma(chave),
+                           "forma_que_funcionou": forma_usada if estado == "vivo" else None}
         if estado == "vivo":
             vivos.append(nome)
-        C.log(f"prova-de-fogo: {nome} → {estado} ({detalhe[:60]}) · chave: {_forma(chave)}")
+        C.log(f"prova-de-fogo: {nome} → {estado} ({detalhe[:60]}) · chave: {_forma(chave)}"
+              + (f" · funcionou como {forma_usada}" if estado == "vivo" else ""))
 
     try:
         C.escrever_remoto(ARQ, json.dumps({
