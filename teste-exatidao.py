@@ -68,5 +68,12 @@ checar("existe desafio medindo os motores", True)
 import os
 checar("workflow do desafio existe", os.path.exists(".github/workflows/exatidao.yml"))
 
+# ---- nota robusta: mediana das últimas 3 medições ---------------------------------------
+import desafio_exatidao as _D
+checar("mediana corta o azar de uma rodada", _D._mediana([8, 3, 8]) == 8)
+checar("mediana corta a sorte de uma rodada", _D._mediana([0, 0, 8]) == 0)
+checar("histórico guarda só as 3 últimas", _D._com_historico("x", 3, {"x": {"notas": [8, 8]}})[1] == [8, 8, 3])
+checar("motor novo entra com a própria nota", _D._com_historico("novo", 6, {})[0] == 6)
+
 print("\nteste-exatidao:", "PASSOU" if ok else "FALHOU")
 sys.exit(0 if ok else 1)

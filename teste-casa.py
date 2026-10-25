@@ -550,5 +550,10 @@ if os.path.exists("confianca.py"):
     ok("ranking vazio não trava a casa", len(_todos) == 2 and not _nenhuma)
     _CF2.C._ranking_exatidao = _orig
 
+# 33. a nota dos motores é mediana de 3, não uma rodada de sorte
+_fonte_dx = open("desafio_exatidao.py", encoding="utf-8").read()
+ok("exatidão usa mediana das medições", "_mediana(" in _fonte_dx and "_com_historico" in _fonte_dx)
+ok("a medição guarda histórico por motor", '"motores": {' in _fonte_dx)
+
 print("\n%d/%d verificações do estado da casa passaram" % (certos, certos + falhas))
 raise SystemExit(1 if falhas else 0)

@@ -61,8 +61,32 @@ def _acertou(resposta, esperado, tipo):
     return esperado.lower() in t
 
 
+def _mediana(valores):
+    v = sorted(valores)
+    if not v:
+        return 0
+    meio = len(v) // 2
+    return v[meio] if len(v) % 2 else round((v[meio - 1] + v[meio]) / 2)
+
+
+def _com_historico(nome, acertos, anterior):
+    """Nota final = MEDIANA das últimas 3 medições.
+
+    Motivo medido: o g4f auto fez 8/8 numa rodada e 3/8 na seguinte, e o OpenRouter foi de
+    8/8 para 5/8. Uma medição só derruba motor bom por azar de cota e promove motor ruim por
+    sorte. Mediana de três corta os dois extremos.
+    """
+    hist = list((anterior.get(nome) or {}).get("notas") or [])
+    hist = (hist + [acertos])[-3:]
+    return _mediana(hist), hist
+
+
 def medir():
     """Passa o desafio em cada motor vivo, na ordem da cadeia."""
+    try:
+        anterior = json.loads(C.ler_remoto(ARQ, "{}") or "{}").get("motores") or {}
+    except Exception:
+        anterior = {}
     try:
         # TODA a cadeia, inclusive os que hoje são reserva: motor sem nota fica de reserva
         # para sempre, então a medição precisa alcançar todos.
@@ -112,8 +136,12 @@ def medir():
         detalhes[nome] = {"acertos": acertos, "total": total, "honesto": honesto,
                           "segundos_medios": round(sum(tempos) / len(tempos), 1) if tempos else None,
                           "respostas": respostas}
-        if acertos:
-            ranking.append({"motor": nome, "id": p.get("id"), "acertos": acertos,
+        nota_final, hist = _com_historico(nome, acertos, anterior)
+        detalhes[nome]["nota_final"] = nota_final
+        detalhes[nome]["notas"] = hist
+        if nota_final or acertos:
+            ranking.append({"motor": nome, "id": p.get("id"), "acertos": nota_final,
+                            "acertos_agora": acertos, "notas": hist,
                             "total": total, "honesto": honesto})
         C.log(f"exatidão: {nome} → {acertos}/{total}"
               + (" · honesto" if honesto else "") )
@@ -123,6 +151,8 @@ def medir():
         C.escrever_remoto(ARQ, json.dumps({
             "quando": C.agora().isoformat(timespec="seconds"),
             "ranking": ranking, "detalhes": detalhes,
+            "motores": {n: {"notas": d.get("notas"), "nota_final": d.get("nota_final"),
+                            "honesto": d.get("honesto")} for n, d in detalhes.items()},
             "criterio": "8 perguntas com resposta conferível + 1 de honestidade (dizer que não sabe)",
         }, ensure_ascii=False), "exatidão: ranking medido dos motores")
     except Exception as e:
@@ -131,8 +161,11 @@ def medir():
     if not ranking:
         return "🎯 Exatidão: nenhum motor acertou nada agora."
     melhor = ranking[0]
+    acima = [r for r in ranking if (r.get("acertos") or 0) >= 4]
     return (f"🎯 Exatidão: melhor motor é **{melhor['motor']}** "
-            f"({melhor['acertos']}/{melhor['total']}) · {len(ranking)} motores pontuaram")
+            f"(mediana {melhor['acertos']}/{melhor['total']}, agora "
+            f"{melhor.get('acertos_agora')}) · {len(acima)} acima do piso de 4 · "
+            f"{len(ranking)} pontuaram")
 
 
 if __name__ == "__main__":
