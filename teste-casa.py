@@ -259,9 +259,21 @@ ok("o teste de saúde não usa mais o 'responda OK'",
 ok("motor sem cérebro sai da frente da fila", "sem_cerebro" in fonte_comum)
 fonte_resp = open(os.path.join(RAIZ, "responder.py"), encoding="utf-8").read()
 ok("existe o comando !motores", "def motores_cmd" in fonte_resp and "motores|motor" in fonte_resp)
-ok("o teste é feito no runner, não no meu ambiente",
-   os.path.exists(os.path.join(RAIZ, "testar-motores.py"))
-   and os.path.exists(os.path.join(RAIZ, ".github", "workflows", "motores.yml")))
+# A sonda tem de existir aqui; o workflow que a executa vive no repositório PÚBLICO
+# (minutos ilimitados). No privado basta a sonda, que é chamada pelo workflow público.
+_tem_sonda = os.path.exists(os.path.join(RAIZ, "testar-motores.py"))
+_tem_wf = os.path.exists(os.path.join(RAIZ, ".github", "workflows", "motores.yml"))
+_eh_privado = os.path.isdir(os.path.join(RAIZ, "MEMORIA"))
+ok("o teste é feito no runner, não no meu ambiente", _tem_sonda and (_tem_wf or _eh_privado))
+
+# 14. o juiz não pode vazar bastidor para o dono
+ok("veredicto de juiz é reconhecido", C_.parece_veredicto(
+   "**Veredicto**\n- **Resposta A**: correta e completa\n- **Resposta B**: interrompida"))
+ok("resposta de verdade não é confundida com veredicto",
+   not C_.parece_veredicto("O céu é azul porque a atmosfera espalha mais o azul. 17 x 23 = 391."))
+ok("texto vazio é tratado como bastidor", C_.parece_veredicto(""))
+ok("o juiz cujo veredicto é descartado cai na melhor resposta original",
+   "juiz descartado" in open(os.path.join(RAIZ, "comum.py"), encoding="utf-8").read())
 
 print("\n%d/%d verificações do estado da casa passaram" % (certos, certos + falhas))
 raise SystemExit(1 if falhas else 0)

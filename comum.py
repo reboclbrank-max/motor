@@ -4122,6 +4122,26 @@ def marcar_ultima_resposta_ruim(numero):
         return f"Não consegui registrar agora: `{str(e)[:150]}`"
 
 
+RE_VEREDICTO = re.compile(
+    r"(resposta\s+[ab]\b|veredicto|vencedora|\bjuiz\b|as duas respostas|"
+    r"portanto,? a resposta|melhor resposta|ambas (?:as )?respostas|"
+    r"explica[çc][ãa]o:.*interrompida|n[ãa]o inclui a resposta)",
+    re.IGNORECASE)
+
+
+def parece_veredicto(texto):
+    """Verdadeiro quando o texto é bastidor de avaliação, não resposta ao dono."""
+    t = (texto or "").strip()
+    if not t:
+        return True
+    if RE_VEREDICTO.search(t):
+        return True
+    # relatório curto listando duas alternativas = juiz, não resposta
+    if len(t) < 700 and t.count("\n-") >= 2 and ("A)" in t or "A:" in t):
+        return True
+    return False
+
+
 def pensar_bem(pergunta, system=None):
     """Modo 'pensar bem': dois motores respondem e um juiz escreve a versão final."""
     system = system if system is not None else montar_system(None)
@@ -4137,8 +4157,14 @@ def pensar_bem(pergunta, system=None):
             "Escolha a melhor e escreva a VERSÃO FINAL melhorada, em português, completa e direta. "
             "Não explique a escolha — só entregue a resposta final.")
     tf, mj, _ej = chamar_llm([{"role": "user", "content": juiz}], "")
+    # O juiz frequentemente ignora "não explique a escolha" e devolve o VEREDICTO
+    # ("Resposta A venceu"), que não é resposta para ninguém. Pedir no prompt não basta:
+    # a saída é conferida e, se for bastidor, volta a melhor resposta original.
+    if tf and parece_veredicto(tf):
+        log("juiz devolveu veredicto em vez de resposta; usando a melhor resposta original")
+        tf = None
     if not tf:
-        tf = ta if len(ta) >= len(tb) else tb
+        return (ta if len(ta) >= len(tb) else tb), f"{ma} + {mb} (juiz descartado)"
     return tf, f"{ma} + {mb}, juiz {mj}"
 
 
