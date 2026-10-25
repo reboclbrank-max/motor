@@ -39,7 +39,11 @@ provs = C.montar_provedores()
 extras = [p for p in provs if str(p.get("id", "")).startswith("llm7-ex")]
 checar("motores extras da varredura entram na fila", len(extras) == 2
        and extras[0]["modelos"] == ["motor-extra-x"])
-checar("extras usam o LLM7 keyless", all(p["chave"] == "unused" for p in extras))
+# O teste antigo exigia chave == "unused" (llm7 sem chave). Isso deixou de ser verdade em
+# 25/10/2026, quando LLM7_API_KEY passou a existir no repositório público. O que importa não
+# é o valor literal: é que os extras REUSEM a chave do llm7, sem exigir credencial nova.
+checar("extras não exigem credencial nova (reusam a do llm7)",
+       all(p["chave"] in ("unused", C.CHAVE_LLM7) for p in extras))
 
 # ---- pergunta complexa ----
 checar("pergunta complexa detectada", C._pergunta_complexa("Compare a estratégia A e B para meu jogo e planeje o lançamento"))
