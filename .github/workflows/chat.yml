@@ -113,6 +113,10 @@ jobs:
           YT_API_KEY: ${{ secrets.YT_API_KEY }}
           IG_TOKEN: ${{ secrets.IG_TOKEN }}
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          # --- e-mail da casa (conta só do chat): enviar relatório e ler a caixa ---
+          EMAIL_ENDERECO: ${{ secrets.EMAIL_ENDERECO }}
+          EMAIL_SENHA_APP: ${{ secrets.EMAIL_SENHA_APP }}
+          EMAIL_PARA: ${{ secrets.EMAIL_PARA }}
         run: python3 varrer.py
 
       - name: Devolver o que a resposta aprendeu (memória)
