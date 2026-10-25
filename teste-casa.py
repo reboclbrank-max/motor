@@ -285,9 +285,11 @@ ok("chamar_llm preserva cerebro/acertos_cerebro ao atualizar o diagnóstico",
 
 # 16. escrita remota tem de espelhar no disco, senão o "subir" desfaz
 fonte = open(os.path.join(RAIZ, "comum.py"), encoding="utf-8").read()
+_corpo_escrever = fonte[fonte.index("def escrever_remoto("):]
+_corpo_escrever = _corpo_escrever[:_corpo_escrever.index("\n\n\n") if "\n\n\n" in _corpo_escrever else 800]
 ok("escrever_remoto espelha o arquivo no disco antes de enviar",
-   "_gravar_local_memoria(caminho, conteudo)" in fonte
-   and fonte.index("_gravar_local_memoria(caminho, conteudo)") < fonte.index("for tentativa in range(3):"))
+   "_gravar_local_memoria(caminho, conteudo)" in _corpo_escrever
+   and _corpo_escrever.index("_gravar_local_memoria") < _corpo_escrever.index('gh("PUT"'))
 import tempfile, shutil
 _orig = os.getcwd()
 _tmp = tempfile.mkdtemp(); os.makedirs(os.path.join(_tmp, "MEMORIA"))
