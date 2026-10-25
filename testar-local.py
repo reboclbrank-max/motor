@@ -56,7 +56,9 @@ def testar(nome, url, arquivo):
     mb = os.path.getsize(caminho) / 1e6
     print(f"\n{nome}: {mb:.0f} MB (download {seg}s)")
     t0 = time.time()
-    llm = Llama(model_path=caminho, n_ctx=1024, n_threads=os.cpu_count() or 4, verbose=False)
+    _threads = os.cpu_count() or 4
+    llm = Llama(model_path=caminho, n_ctx=2048, n_threads=_threads, n_batch=512,
+                n_threads_batch=_threads, verbose=False)
     print(f"  carregou em {time.time() - t0:.1f}s")
 
     # desafio de raciocínio: mesma prova que uso nos motores remotos
@@ -94,6 +96,18 @@ def main():
     print("MOTOR LOCAL — sem chave, sem cota, sem API")
     print(f"CPUs: {os.cpu_count()} | memória: livre é o que o runner der")
     print("=" * 70)
+    # A CPU do runner é compartilhada: medir o modelo sem medir a máquina engana.
+    try:
+        with open("/proc/cpuinfo") as f:
+            modelo_cpu = [l.split(":", 1)[1].strip() for l in f if l.startswith("model name")][0]
+        print(f"CPU: {modelo_cpu}")
+        with open("/proc/cpuinfo") as f:
+            flags = [l for l in f if l.startswith("flags")][0]
+        print(f"AVX2: {'avx2' in flags} | AVX512: {'avx512f' in flags}")
+        with open("/proc/loadavg") as f:
+            print(f"carga no momento: {f.read().strip()}")
+    except Exception:
+        pass
     resultados = []
     for nome, url, arq in MODELOS:
         try:

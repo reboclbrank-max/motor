@@ -25,7 +25,7 @@ jobs:
   local:
     if: github.event_name == 'schedule' || github.actor == 'reboclbrank-max'
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
       # Pinado por SHA (tag móvel comprometida rodaria com o PAT no ambiente).
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -35,8 +35,13 @@ jobs:
 
       - name: Instalar llama.cpp (roda em CPU, sem GPU)
         run: |
-          pip install --quiet --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu llama-cpp-python
-          python3 -c "import llama_cpp; print('llama_cpp ok')"
+          # BUILD NATIVO: a roda pronta do llama-cpp-python é compilada genérica. Com
+          # GGML_NATIVE=ON o compilador usa as instruções desta CPU (AVX2/AVX512).
+          # Sem isso a medição anterior (1,1 tok/s num 1.5B) reprovou o modelo por
+          # defeito de build, não por falta de CPU.
+          CMAKE_ARGS="-DGGML_NATIVE=ON -DGGML_OPENMP=ON" \
+            pip install --quiet --no-cache-dir llama-cpp-python
+          python3 -c "import llama_cpp; print('llama_cpp compilado para esta CPU')"
 
       - name: Guardar o modelo entre execuções
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
