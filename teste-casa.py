@@ -332,5 +332,25 @@ ok("a camada de dados é usada ANTES de chamar o motor",
    "texto_com_dados" in fonte_resp
    and fonte_resp.index("camada de dados") < fonte_resp.index("C.pensar_bem(pergunta_pensar"))
 
+# 18. rodízio: o limite de um motor não pode virar o limite de todos
+import rodizio as R_
+_r_original = R_._carregar
+_estado = {"a": {"ultimo_uso": 100}, "b": {"ultimo_uso": 3}, "c": {"ultimo_uso": 50}}
+R_._carregar = lambda: dict(_estado)
+try:
+    _prov = [{"id": "a"}, {"id": "b"}, {"id": "c"}]
+    ok("o rodízio usa primeiro o motor parado há mais tempo",
+       [p["id"] for p in R_.ordenar(_prov)] == ["b", "c", "a"])
+    _estado["a"] = {"ultimo_uso": 100, "livre_em": __import__("time").time() + 60}
+    _ordem = [p["id"] for p in R_.ordenar(_prov)]
+    ok("motor em quarentena vai para o fim", _ordem[-1] == "a", str(_ordem))
+finally:
+    R_._carregar = _r_original
+fonte_comum = open(os.path.join(RAIZ, "comum.py"), encoding="utf-8").read()
+ok("a cadeia aplica o rodízio antes de tentar",
+   "import rodizio as _rod" in fonte_comum and fonte_comum.index("_rod.ordenar") < fonte_comum.index("for p in ordenados"))
+ok("429 coloca o motor em quarentena", R_.QUARENTENA_429 >= 60)
+ok("quarentena não é para sempre (volta sozinho)", R_.QUARENTENA_429 <= 600)
+
 print("\n%d/%d verificações do estado da casa passaram" % (certos, certos + falhas))
 raise SystemExit(1 if falhas else 0)

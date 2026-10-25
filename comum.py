@@ -3466,6 +3466,14 @@ def chamar_llm(mensagens, system=None, forcar_teste=False, preferir=None, exclui
                 1 if lento else 0)
 
     ordenados = sorted(provedores, key=prioridade)
+    # RODÍZIO: entre os que estão no mesmo nível de prioridade, usa primeiro o que está há
+    # mais tempo parado e pula quem está em quarentena por 429. Sem isso, o primeiro da
+    # fila leva todas as chamadas até estourar, e o limite DELE vira o limite de todos.
+    try:
+        import rodizio as _rod
+        ordenados = _rod.ordenar(ordenados)
+    except Exception as e:
+        log(f"rodízio não aplicado ({str(e)[:80]})")
     if diag.get("ultimo_provedor"):
         ordenados.sort(key=lambda p: 0 if p["id"] == diag["ultimo_provedor"] else 1)
     if preferir:
@@ -3505,12 +3513,22 @@ def chamar_llm(mensagens, system=None, forcar_teste=False, preferir=None, exclui
                     estados[p["id"]] = _novo
                     diag["provedores"] = estados
                     marcar_uso(diag, p["id"])
+                    try:
+                        import rodizio as _rod
+                        _rod.marcar_uso(p["id"], None)
+                    except Exception:
+                        pass
                     salvar_diagnostico(diag)
                     return _limpar_pensar(texto), p["nome"], None
             except Exception as e:
                 ms = int((time.time() - t0) * 1000)
                 ultimo_erro = e
                 log(f"motor {p['id']} falhou (passada {passada+1}, {ms} ms): {str(e)[:150]}")
+                try:
+                    import rodizio as _rod
+                    _rod.marcar_uso(p["id"], e)
+                except Exception:
+                    pass
                 antigo = estados.get(p["id"], {})
                 _novo = {"ok": False, "testado": agora_iso, "erro": str(e)[:200],
                          "ms_ultimo": ms, "ok_total": int(antigo.get("ok_total") or 0),
