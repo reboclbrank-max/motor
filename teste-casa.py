@@ -426,5 +426,24 @@ try:
 finally:
     D_._linhas_da_casa = _orig3
 
+# 23. aproveitamento: o desperdício tem de ser medido, não sentido
+ok("existe auditoria de uso", os.path.exists(os.path.join(RAIZ, "auditoria-uso.py")))
+fonte_aud = open(os.path.join(RAIZ, "auditoria-uso.py"), encoding="utf-8").read()
+for _eixo in ("funcoes_orfas", "robos_por_repo", "motores_em_uso", "segredos_sem_uso"):
+    ok(f"a auditoria mede {_eixo}", f"def {_eixo}" in fonte_aud)
+ok("a auditoria cobra sozinha (roda em cron e posta relatório)",
+   "schedule" in open(os.path.join(RAIZ, ".github", "workflows", "auditoria-uso.yml"),
+                      encoding="utf-8").read() and "issues" in fonte_aud)
+# os robôs portados existem de verdade
+_robos = ["checkup", "sentinela", "relatorio-semanal", "estudo", "oficina", "melhoria-continua",
+          "boletim", "rotina", "inspire", "manutencao", "espelho", "banco"]
+_faltando = [r for r in _robos
+             if not os.path.exists(os.path.join(RAIZ, ".github", "workflows", f"{r}.yml"))]
+ok("os 12 robôs portados estão no repositório público", not _faltando, str(_faltando))
+_scripts = ["checkup", "sentinela", "relatorio", "estudo", "oficina", "digestao", "autocritica",
+            "boletim", "rotina", "inspire", "manutencao", "banco"]
+_faltando_s = [x for x in _scripts if not os.path.exists(os.path.join(RAIZ, f"{x}.py"))]
+ok("os scripts que os robôs usam estão presentes", not _faltando_s, str(_faltando_s))
+
 print("\n%d/%d verificações do estado da casa passaram" % (certos, certos + falhas))
 raise SystemExit(1 if falhas else 0)

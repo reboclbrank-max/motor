@@ -1,0 +1,64 @@
+name: checkup (saúde dos motores)
+
+# Portado do repositório privado `agente` em 25/10/2026.
+# POR QUE: o privado tem 2.000 minutos/mês e a cota estourou em 12/10 — checkup (saúde dos motores) ficou parado
+# desde então. O repositório público tem minutos ilimitados, e a memória continua no privado
+# (baixada e devolvida por sincronizar.py com o PAT em secret).
+#
+# Dá um ping barato em cada motor e atualiza o diagnóstico. Motor morto cai para o
+# fim da fila por 30 min — é o que impede a cadeia de insistir num motor quebrado.
+
+on:
+  schedule:
+    - cron: '45 */12 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checkup
+  cancel-in-progress: false
+
+jobs:
+  rodar:
+    if: github.event_name == 'schedule' || github.actor == 'reboclbrank-max'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # Pinado por SHA: tag móvel comprometida rodaria com o PAT no ambiente.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+
+      - name: Barreira offline (sem rede, sem segredo)
+        run: python3 teste-casa.py
+
+      - name: Baixar a memória do repositório privado
+        env:
+          PAT_MEMORIA: ${{ secrets.PAT_MEMORIA }}
+          REPO_MEMORIA: ${{ secrets.REPO_MEMORIA }}
+        run: python3 sincronizar.py baixar
+
+      - name: Checkup dos motores
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_MEMORIA }}
+          PAT_MEMORIA: ${{ secrets.PAT_MEMORIA }}
+          REPO_CONVERSAS: ${{ secrets.REPO_MEMORIA }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          LLM7_API_KEY: ${{ secrets.LLM7_API_KEY }}
+          ITCH_API_KEYS: ${{ secrets.ITCH_API_KEYS }}
+          YT_API_KEY: ${{ secrets.YT_API_KEY }}
+          IG_TOKEN: ${{ secrets.IG_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+        run: python3 checkup.py
+
+      - name: Devolver o que aprendeu (memória)
+        if: always()
+        env:
+          PAT_MEMORIA: ${{ secrets.PAT_MEMORIA }}
+          REPO_MEMORIA: ${{ secrets.REPO_MEMORIA }}
+        run: python3 sincronizar.py subir
