@@ -79,7 +79,21 @@ def fake_chamar(mensagens, system=None, forcar_teste=False, preferir=None, exclu
 
 C.chamar_llm = fake_chamar
 tf, info = C.pensar_bem("explique quantum", "sys")
-check("pensar_bem devolve final do juiz", tf == "RESPOSTA FINAL DOJUIZ" or tf == "RESPOSTA FINAL DO JUIZ")
+# Regra nova (25/10/2026): o juiz às vezes devolve o VEREDICTO ("Resposta A venceu") em vez
+# da resposta — aconteceu na issue #30. Parece_veredicto() descarta e usa a melhor original.
+check("juiz com resposta legítima passa direto", tf == "RESPOSTA FINAL DO JUIZ")
+
+# juiz que vaza bastidor: a resposta final tem de ser a original, e o rótulo avisar
+def fake_juiz_ruim(mensagens, system=None, forcar_teste=False, preferir=None, excluir=()):
+    if any("juiz" in (m.get("content") or "").lower() for m in mensagens):
+        return ("**Veredicto**\n- **Resposta A**: correta\n- **Resposta B**: parcialmente", "Juiz", None)
+    return "resposta original util", "Motor", None
+
+
+C.chamar_llm = fake_juiz_ruim
+tf2, info2 = C.pensar_bem("explique quantum", "sys")
+check("juiz que vaza veredicto é descartado", tf2 == "resposta original util")
+check("o rótulo avisa que o juiz foi descartado", "juiz descartado" in (info2 or ""))
 check("pensar_bem chamou 3x (2 motores + juiz)", len(chamadas) == 3)
 check("pensar_bem exclui o 1º motor no 2º", chamadas[1][1] == ("Motor 1",))
 
