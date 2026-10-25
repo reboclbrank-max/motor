@@ -49,6 +49,7 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           LLM7_API_KEY: ${{ secrets.LLM7_API_KEY }}
+          NOVITA_API_KEY: ${{ secrets.NOVITA_API_KEY }}
           ITCH_API_KEYS: ${{ secrets.ITCH_API_KEYS }}
           YT_API_KEY: ${{ secrets.YT_API_KEY }}
           IG_TOKEN: ${{ secrets.IG_TOKEN }}

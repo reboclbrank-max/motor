@@ -105,6 +105,7 @@ jobs:
           UPSTAGE_API_KEY: ${{ secrets.UPSTAGE_API_KEY }}
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
           LLM7_API_KEY: ${{ secrets.LLM7_API_KEY }}
+          NOVITA_API_KEY: ${{ secrets.NOVITA_API_KEY }}
           OPENAI_COMPAT_KEY: ${{ secrets.OPENAI_COMPAT_KEY }}
           OPENAI_COMPAT_BASE: ${{ secrets.OPENAI_COMPAT_BASE }}
           OPENAI_COMPAT_MODEL: ${{ secrets.OPENAI_COMPAT_MODEL }}

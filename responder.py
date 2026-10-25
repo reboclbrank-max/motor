@@ -723,6 +723,7 @@ def principal():
             (r"^/?(?:verificar|checar|cheque)\s*:?\s+(https?://\S+)$", "🔎", "verificação", C.ferramenta_verificar),
             (r"^/?(?:memoria|memória)\s*:?\s+(.+)$", "🧠", "memória", C.ferramenta_memoria),
             (r"^/?(?:dados|banco de dados)\s*:?\s*$", "", "banco de dados", lambda _a: C.ferramenta_dados_agora()),
+            (r"^/?(?:banco\s+fresco|atualizar\s+banco|dados\s+agora)\s*:?\s*$", "🗄", "banco fresco", lambda _a: C.ferramenta_dados("")),
             (r"^/?(?:banco)\s*:?\s+(.+)$", "🗄", "banco de dados", C.buscar_no_banco),
             (r"^/?(?:placar|painel)\s*:?\s*$", "", "painel", lambda _a: C.ferramenta_placar()),
             (r"^/?(?:janelas|caçadas|cacas)\s*:?\s*$", "📊", "diário de janelas",
