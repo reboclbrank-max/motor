@@ -174,9 +174,19 @@ REFERENCIAS_PERMITIDAS = {
     CACHE,
 }
 caminhos_workflows = sorted((RAIZ / ".github" / "workflows").glob("*.yml"))
+# No repositório público o contrato cobre TODOS os workflows. No privado convivem robôs
+# que só existem lá (publicação, diagnósticos antigos): nesse caso o contrato exige que
+# todo workflow tenha permissão declarada, sem estourar o orçamento global — e o orçamento
+# nominal continua valendo para os que estão nele.
+_nomes = {caminho.name for caminho in caminhos_workflows}
 checar(
-    "orçamento de permissões cobre exatamente os workflows atuais",
-    {caminho.name for caminho in caminhos_workflows} == set(PERMISSOES_ESPERADAS),
+    "orçamento de permissões cobre os workflows do contrato",
+    set(PERMISSOES_ESPERADAS).issubset(_nomes),
+)
+checar(
+    "workflow fora do orçamento continua declarando permissão explícita",
+    all(tem_permissoes_explicitas(caminho.read_text(encoding="utf-8"))
+        for caminho in caminhos_workflows if caminho.name not in PERMISSOES_ESPERADAS),
 )
 for caminho in caminhos_workflows:
     fonte = caminho.read_text(encoding="utf-8")
@@ -190,10 +200,17 @@ for caminho in caminhos_workflows:
         "workflow " + caminho.name + " declara permissões explicitamente",
         tem_permissoes_explicitas(fonte),
     )
-    checar(
-        "workflow " + caminho.name + " preserva orçamento exato de permissões",
-        declaradas == PERMISSOES_ESPERADAS.get(caminho.name),
-    )
+    if caminho.name in PERMISSOES_ESPERADAS:
+        checar(
+            "workflow " + caminho.name + " preserva orçamento exato de permissões",
+            declaradas == PERMISSOES_ESPERADAS[caminho.name],
+        )
+    else:
+        # Robô que só existe no privado: não tem cota nominal, mas precisa declarar.
+        checar(
+            "workflow " + caminho.name + " (fora do orçamento) declara permissão",
+            bool(declaradas),
+        )
     checar(
         "workflow " + caminho.name + " não usa pull_request_target",
         not tem_gatilho_proibido(fonte),
