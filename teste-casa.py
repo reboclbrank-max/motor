@@ -464,5 +464,14 @@ if os.path.exists(".github/workflows/vitrine.yml"):
        "BSKY" not in _vitrine and "TUMBLR" not in _vitrine)
 ok("vitrine tem teste próprio", os.path.exists("teste-vitrine.py"))
 
+# 26. chave de API só entra pela porta única (_k) e sai decodificada
+_fonte_comum = open("comum.py", encoding="utf-8").read()
+ok("chave de API só é lida pela função _k",
+   "def _k(" in _fonte_comum and _fonte_comum.count('= _k("') >= 12)
+ok("nenhuma chave de motor é lida direto do ambiente",
+   not any(f'os.environ.get("{v}"' in _fonte_comum for v in
+           ("GROQ_API_KEY", "OPENROUTER_API_KEY", "SAMBANOVA_API_KEY", "UPSTAGE_API_KEY",
+            "NOVITA_API_KEY", "GLAMA_API_KEY", "HUGGINGFACE_API_KEY")))
+
 print("\n%d/%d verificações do estado da casa passaram" % (certos, certos + falhas))
 raise SystemExit(1 if falhas else 0)

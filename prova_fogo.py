@@ -23,18 +23,30 @@ import comum as C
 ARQ = "MEMORIA/prova-fogo.json"
 PERGUNTA = "Responda apenas: ok"
 
-# (nome, base, modelo, variável de ambiente da chave)
+# (nome, base, [modelos a tentar em ordem], variável de ambiente da chave)
+#
+# Modelo muda de nome sem avisar: 404 depois de decodificar a chave é isso, não chave
+# ruim. Por isso cada provedor traz candidatos e a prova para no primeiro que responder.
+# Bases conferidas em 25/10/2026: requesty é router.requesty.ai (api. não resolve) e a
+# NVIDIA é integrate.api.nvidia.com (nvidia.g4f.dev nem responde).
 PROVEDORES = [
-    ("groq", "https://api.groq.com/openai/v1", "llama-3.3-70b-versatile", "GROQ_API_KEY"),
-    ("openrouter", "https://openrouter.ai/api/v1", "meta-llama/llama-3.3-70b-instruct:free", "OPENROUTER_API_KEY"),
-    ("llm7", "https://api.llm7.io/v1", "gpt-4o-mini", "LLM7_API_KEY"),
-    ("sambanova", "https://api.sambanova.ai/v1", "Meta-Llama-3.3-70B-Instruct", "SAMBANOVA_API_KEY"),
-    ("upstage", "https://api.upstage.ai/v1/solar", "solar-pro", "UPSTAGE_API_KEY"),
-    ("glama", "https://glama.ai/api/gateway/openai/v1", "gpt-4o-mini", "GLAMA_API_KEY"),
-    ("requesty", "https://api.requesty.ai/v1", "openai/gpt-4o-mini", "REQUESTY_API_KEY"),
-    ("novita", "https://api.novita.ai/v3/openai", "meta-llama/llama-3.3-70b-instruct", "NOVITA_API_KEY"),
-    ("nvidia", "https://nvidia.g4f.dev/v1", "meta/llama-3.3-70b-instruct", "NVIDIA_API_KEY"),
-    ("huggingface", "https://router.huggingface.co/v1", "meta-llama/Llama-3.3-70B-Instruct", "HUGGINGFACE_API_KEY"),
+    ("groq", "https://api.groq.com/openai/v1",
+     ["llama-3.1-8b-instant", "llama-3.3-70b-versatile", "gemma2-9b-it"], "GROQ_API_KEY"),
+    ("openrouter", "https://openrouter.ai/api/v1",
+     ["meta-llama/llama-3.1-8b-instruct:free", "google/gemma-2-9b-it:free",
+      "mistralai/mistral-7b-instruct:free"], "OPENROUTER_API_KEY"),
+    ("llm7", "https://api.llm7.io/v1", ["gpt-4o-mini", "default", "codestral-latest"], "LLM7_API_KEY"),
+    ("sambanova", "https://api.sambanova.ai/v1",
+     ["Meta-Llama-3.3-70B-Instruct", "Meta-Llama-3.1-8B-Instruct"], "SAMBANOVA_API_KEY"),
+    ("upstage", "https://api.upstage.ai/v1/solar", ["solar-pro", "solar-mini"], "UPSTAGE_API_KEY"),
+    ("glama", "https://glama.ai/api/gateway/openai/v1", ["gpt-4o-mini"], "GLAMA_API_KEY"),
+    ("requesty", "https://router.requesty.ai/v1", ["openai/gpt-4o-mini"], "REQUESTY_API_KEY"),
+    ("novita", "https://api.novita.ai/v3/openai",
+     ["meta-llama/llama-3.3-70b-instruct", "meta-llama/llama-3.1-8b-instruct"], "NOVITA_API_KEY"),
+    ("nvidia", "https://integrate.api.nvidia.com/v1",
+     ["meta/llama-3.3-70b-instruct", "meta/llama-3.1-8b-instruct"], "NVIDIA_API_KEY"),
+    ("huggingface", "https://router.huggingface.co/v1",
+     ["Qwen/Qwen3-235B-A22B-Instruct-2507", "meta-llama/Llama-3.3-70B-Instruct"], "HUGGINGFACE_API_KEY"),
 ]
 
 
@@ -116,19 +128,24 @@ def _bater(base, modelo, chave, timeout=40):
 def disparar():
     """Bate em cada provedor que tenha chave. Provedor sem chave não é falha: é ausente."""
     resultado, vivos, testados = {}, [], 0
-    for nome, base, modelo, var in PROVEDORES:
+    for nome, base, modelos, var in PROVEDORES:
         chave = os.environ.get(var, "").strip()
         if not chave:
             resultado[nome] = {"estado": "sem chave", "detalhe": f"{var} não configurada"}
             continue
         testados += 1
-        estado, detalhe, gasto, forma_usada = "morto", "", 0.0, "crua"
+        estado, detalhe, gasto, forma_usada, modelo_usado = "morto", "", 0.0, "crua", modelos[0]
         for rotulo, candidata in _variantes(chave):
-            estado, detalhe, gasto = _bater(base, modelo, candidata)
-            forma_usada = rotulo
+            for modelo in modelos:
+                estado, detalhe, gasto = _bater(base, modelo, candidata)
+                forma_usada, modelo_usado = rotulo, modelo
+                if estado == "vivo":
+                    break
+                if "404" not in detalhe and "model" not in detalhe.lower():
+                    break  # não é problema de modelo: não adianta trocar
             if estado == "vivo":
                 break
-        resultado[nome] = {"estado": estado, "detalhe": detalhe, "modelo": modelo,
+        resultado[nome] = {"estado": estado, "detalhe": detalhe, "modelo": modelo_usado,
                            "segundos": gasto, "forma_da_chave": _forma(chave),
                            "forma_que_funcionou": forma_usada if estado == "vivo" else None}
         if estado == "vivo":

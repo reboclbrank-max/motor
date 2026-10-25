@@ -39,27 +39,53 @@ GH_TOKEN = os.environ.get("GITHUB_TOKEN", "").strip()
 REPO = (os.environ.get("REPO_CONVERSAS") or os.environ.get("GITHUB_REPOSITORY")
         or "reboclbrank-max/agente").strip()
 
+def _k(nome, padrao=""):
+    """Lê a chave do ambiente já LIMPA, e é a única porta de entrada das chaves.
+
+    O cofre gravava cada chave em base64 duplo. Ao copiar para as Actions secrets do
+    repositório público o blob veio junto, e todo provedor respondia 401 — 10 de 10 — sem
+    ninguém ver, porque a chave "existia". Aqui o blob é decodificado até virar uma chave
+    imprimível de verdade; chave crua passa direto, sem tocar.
+    """
+    bruto = os.environ.get(nome, "").strip()
+    if not bruto:
+        return padrao
+    atual = bruto
+    for _ in range(2):
+        # blob do cofre termina em padding '=' e é base64 válido; chave crua não.
+        if not atual.endswith("="):
+            break
+        try:
+            texto = base64.b64decode(atual, validate=True).decode("utf-8")
+        except Exception:
+            break
+        if not texto or not texto.isprintable():
+            break
+        atual = texto.strip()
+    return atual
+
+
 # chaves opcionais (quanto mais, mais motores — todos gratuitos)
-GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
-GROQ_KEY = os.environ.get("GROQ_API_KEY", "").strip()
+GEMINI_KEY = _k("GEMINI_API_KEY")
+GROQ_KEY = _k("GROQ_API_KEY")
 EMAIL_ENDERECO = os.environ.get("EMAIL_ENDERECO", "").strip()
 EMAIL_SENHA_APP = os.environ.get("EMAIL_SENHA_APP", "").strip()
 EMAIL_PARA = os.environ.get("EMAIL_PARA", "").strip()  # só por secret; endereço pessoal não mora no código
-OPENROUTER_KEY = os.environ.get("OPENROUTER_API_KEY", "").strip()
-HUGGINGFACE_KEY = os.environ.get("HUGGINGFACE_API_KEY", "").strip()
-CEREBRAS_KEY = os.environ.get("CEREBRAS_API_KEY", "").strip()
-REQUESTY_KEY = os.environ.get("REQUESTY_API_KEY", "").strip()
-ZHIPU_KEY = os.environ.get("ZHIPU_API_KEY", "").strip()
-MISTRAL_KEY = os.environ.get("MISTRAL_API_KEY", "").strip()
-OPENAI_COMPAT_KEY = os.environ.get("OPENAI_COMPAT_KEY", "").strip()
+OPENROUTER_KEY = _k("OPENROUTER_API_KEY")
+HUGGINGFACE_KEY = _k("HUGGINGFACE_API_KEY")
+CEREBRAS_KEY = _k("CEREBRAS_API_KEY")
+REQUESTY_KEY = _k("REQUESTY_API_KEY")
+ZHIPU_KEY = _k("ZHIPU_API_KEY")
+MISTRAL_KEY = _k("MISTRAL_API_KEY")
+OPENAI_COMPAT_KEY = _k("OPENAI_COMPAT_KEY")
 OPENAI_COMPAT_BASE = os.environ.get("OPENAI_COMPAT_BASE", "").strip().rstrip("/")
 OPENAI_COMPAT_MODELO = os.environ.get("OPENAI_COMPAT_MODEL", "").strip()
-CHAVE_LLM7 = os.environ.get("LLM7_API_KEY", "").strip() or "unused"
-ZAI_KEY = os.environ.get("ZAI_API_KEY", "").strip()
-SAMBA_KEY = os.environ.get("SAMBANOVA_API_KEY", "").strip()
-GLAMA_KEY = os.environ.get("GLAMA_API_KEY", "").strip()
-UPSTAGE_KEY = os.environ.get("UPSTAGE_API_KEY", "").strip()
-OLLAMA_KEY = os.environ.get("OLLAMA_API_KEY", "").strip()
+CHAVE_LLM7 = _k("LLM7_API_KEY") or "unused"
+ZAI_KEY = _k("ZAI_API_KEY")
+SAMBA_KEY = _k("SAMBANOVA_API_KEY")
+GLAMA_KEY = _k("GLAMA_API_KEY")
+UPSTAGE_KEY = _k("UPSTAGE_API_KEY")
+OLLAMA_KEY = _k("OLLAMA_API_KEY")
 
 GEMINI_MODELO = os.environ.get("GEMINI_MODELO", "gemini-2.5-flash").strip()
 GROQ_MODELO = os.environ.get("GROQ_MODELO", "llama-3.3-70b-versatile").strip()
@@ -3188,7 +3214,7 @@ def montar_provedores():
     if REQUESTY_KEY:
         _mod_rq = os.environ.get("REQUESTY_MODELO", "requesty-instruct").strip()
         provedores.append({"nome": "Requesty (roteador grátis)", "id": "requesty", "tipo": "openai",
-                           "base": "https://api.requesty.ai/v1", "chave": REQUESTY_KEY,
+                           "base": "https://router.requesty.ai/v1", "chave": REQUESTY_KEY,
                            "modelos": [_mod_rq], "modelo": _mod_rq, "timeout": 90})
     if ZHIPU_KEY:
         _mod_zp = os.environ.get("ZHIPU_MODELO", "glm-4-flash").strip()
