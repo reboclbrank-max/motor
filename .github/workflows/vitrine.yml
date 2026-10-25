@@ -1,0 +1,67 @@
+name: vitrine (canais parados trabalhando, sem publicar)
+
+# Portado do repositório privado `agente` em 25/10/2026 — os quatro robôs que ficaram
+# de fora do port (bom-dia/Instagram, marketing/Bluesky, eco-devlog/itch, teste-tumblr)
+# existiam só para POSTAR. Publicar exige pedido explícito do dono, então eles passam a
+# fazer a parte útil: conferir cada credencial com chamada de leitura e escrever o
+# rascunho do post do dia, guardado na fila como "aguardando pedido do dono".
+#
+# NADA é enviado para fora além de GET de identidade. Publicar continua sendo um ato
+# separado, com ordem.
+
+on:
+  schedule:
+    - cron: '10 8 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vitrine
+  cancel-in-progress: false
+
+jobs:
+  rodar:
+    if: github.event_name == 'schedule' || github.actor == 'reboclbrank-max'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # Pinado por SHA: tag móvel comprometida rodaria com o PAT no ambiente.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+
+      - name: Barreira offline (sem rede, sem segredo)
+        run: python3 teste-casa.py
+
+      - name: Baixar a memória do repositório privado
+        env:
+          PAT_MEMORIA: ${{ secrets.PAT_MEMORIA }}
+          REPO_MEMORIA: ${{ secrets.REPO_MEMORIA }}
+        run: python3 sincronizar.py baixar
+
+      - name: Vitrine (conferir canais + rascunhos)
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_MEMORIA }}
+          PAT_MEMORIA: ${{ secrets.PAT_MEMORIA }}
+          REPO_CONVERSAS: ${{ secrets.REPO_MEMORIA }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          LLM7_API_KEY: ${{ secrets.LLM7_API_KEY }}
+          NOVITA_API_KEY: ${{ secrets.NOVITA_API_KEY }}
+          ITCH_API_KEYS: ${{ secrets.ITCH_API_KEYS }}
+          YT_API_KEY: ${{ secrets.YT_API_KEY }}
+          IG_TOKEN: ${{ secrets.IG_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: python3 vitrine.py
+
+      - name: Devolver o que aprendeu (memória)
+        if: always()
+        env:
+          PAT_MEMORIA: ${{ secrets.PAT_MEMORIA }}
+          REPO_MEMORIA: ${{ secrets.REPO_MEMORIA }}
+        run: python3 sincronizar.py subir

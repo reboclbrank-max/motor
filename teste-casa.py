@@ -453,5 +453,16 @@ ok("resposta legítima que menciona juiz NÃO é descartada",
 ok("veredicto de verdade continua sendo descartado",
    C_.parece_veredicto("**Veredicto** Resposta A venceu"))
 
+# 25. os canais que ficaram parados agora trabalham, mas sem publicar
+ok("vitrine.py existe (canais parados trabalhando)", os.path.exists("vitrine.py"))
+ok("workflow da vitrine existe e tem cron", "vitrine.yml" in os.listdir(".github/workflows"))
+if os.path.exists(".github/workflows/vitrine.yml"):
+    _vitrine = open(".github/workflows/vitrine.yml", encoding="utf-8").read()
+    ok("vitrine roda a barreira antes de tocar a rede",
+       _vitrine.find("teste-casa.py") < _vitrine.find("vitrine.py"))
+    ok("vitrine não recebe segredo de escrita em rede social",
+       "BSKY" not in _vitrine and "TUMBLR" not in _vitrine)
+ok("vitrine tem teste próprio", os.path.exists("teste-vitrine.py"))
+
 print("\n%d/%d verificações do estado da casa passaram" % (certos, certos + falhas))
 raise SystemExit(1 if falhas else 0)

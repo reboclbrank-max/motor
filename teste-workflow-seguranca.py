@@ -42,6 +42,7 @@ PERMISSOES_ESPERADAS = {
     "sentinela.yml": {"contents": "read"},
     "testes.yml": {"contents": "read"},
     "varredura-motores.yml": {"contents": "read"},
+    "vitrine.yml": {"contents": "read"},
 }
 
 ok = True
