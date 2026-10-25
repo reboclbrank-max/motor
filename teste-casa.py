@@ -388,5 +388,13 @@ _tem_codigo = (os.path.exists(os.path.join(RAIZ, "motor_local.py"))
 ok("o motor local está preparado para rodar", _prepara or _tem_codigo)
 ok("a preparação do motor local não pode derrubar o job", _protegido or not _prepara)
 
+# 20. comando !local: forçar o motor da CPU (garantia de zero API)
+fonte_resp = open(os.path.join(RAIZ, "responder.py"), encoding="utf-8").read()
+ok("existe o comando !local", "def local_cmd" in fonte_resp and "local:" in fonte_resp.replace(" ", ""))
+ok("o comando !local avisa quando o motor não está pronto",
+   "não está pronto" in fonte_resp)
+ok("o comando !local mostra o tempo e que não usou cota",
+   "sem chave, sem API, sem cota" in fonte_resp)
+
 print("\n%d/%d verificações do estado da casa passaram" % (certos, certos + falhas))
 raise SystemExit(1 if falhas else 0)

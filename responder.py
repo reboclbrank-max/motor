@@ -229,6 +229,32 @@ def cacar_cmd():
         return f"⚠️ Não consegui disparar a caçada agora: `{str(e)[:120]}`"
 
 
+def local_cmd(pergunta):
+    """Responde usando SÓ o motor local (roda na CPU do runner, sem chave e sem cota).
+
+    Serve para dois fins: quando o dono quer garantir que nenhuma API foi chamada, e para
+    medir a qualidade do modelo local com pergunta de verdade.
+    """
+    pergunta = (pergunta or "").strip()
+    if not pergunta:
+        return "Me diga a pergunta: `!local: por que o céu é azul?`"
+    try:
+        import time as _t
+        import motor_local as _ml
+        if not _ml.disponivel():
+            return ("O motor local não está pronto nesta execução "
+                    f"(`{_ml.info()['motivo']}`). Ele é preparado pelo workflow do chat; "
+                    "se a instalação falhou, o Chat segue com os motores da nuvem.")
+        t0 = _t.time()
+        texto, motivo = _ml.responder(pergunta, "Responda em português do Brasil, direto.")
+        dur = _t.time() - t0
+        if not texto:
+            return f"O motor local não respondeu ({motivo})."
+        return f"{texto}\n\n---\n_(💻 motor local · {dur:.0f}s · sem chave, sem API, sem cota)_"
+    except Exception as e:
+        return f"⚠️ motor local falhou: `{str(e)[:160]}`"
+
+
 def motores_cmd():
     """Mostra quais motores REALMENTE pensam, medidos pelo desafio — não por HTTP 200."""
     diag = C.ler_diagnostico()
@@ -666,6 +692,7 @@ def principal():
             (r"^/?(?:cacar|caçar)\s*:?\s*$", "🏹", "caçada de motores", lambda _a: cacar_cmd()),
             (r"^/?(?:pagos|pagas)\s*:?\s*$", "💳", "mapa de pagos", lambda _a: pagos_cmd()),
             (r"^[!/]?(?:motores|motor|engines)\s*:?\s*$", "⚙️", "motores", lambda _a: motores_cmd()),
+            (r"^[!/]?local\s*:?\s+(.+)$", "💻", "motor local", lambda a: local_cmd(a)),
             (r"^/?(?:melhorias)\s*:?\s*$", "", "melhorias", lambda _a: C.ferramenta_melhorias()),
             (r"^/?(?:panorama|resumir)\s*:?\s*$", "", "panorama",
              lambda _a: C.resumir_memoria() if "resumir" in texto.lower() else C.ferramenta_panorama()),
