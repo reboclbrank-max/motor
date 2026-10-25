@@ -37,6 +37,20 @@ PROVEDORES = [
 ]
 
 
+def _forma(chave):
+    """Só o formato: prefixo visível e tamanho. Nunca o valor — o log é público.
+
+    Chave de verdade tem prefixo conhecido (gsk_ no Groq, sk- no OpenRouter...). Se o
+    prefixo vier estranho e o tamanho for múltiplo de 4 com '=' no fim, o que foi gravado
+    foi um blob base64 do cofre, não a chave — e é isso que dá 401 em todo provedor.
+    """
+    prefixo = chave[:4] if chave else ""
+    dica = ""
+    if chave.endswith("=") and len(chave) % 4 == 0:
+        dica = " · parece base64 (blob do cofre), não chave crua"
+    return f"{prefixo}… {len(chave)} caracteres{dica}"
+
+
 def _bater(base, modelo, chave, timeout=40):
     """Uma chamada curta. Devolve (estado, detalhe, segundos)."""
     url = base.rstrip("/") + "/chat/completions"
@@ -80,10 +94,11 @@ def disparar():
             continue
         testados += 1
         estado, detalhe, gasto = _bater(base, modelo, chave)
-        resultado[nome] = {"estado": estado, "detalhe": detalhe, "modelo": modelo, "segundos": gasto}
+        resultado[nome] = {"estado": estado, "detalhe": detalhe, "modelo": modelo,
+                           "segundos": gasto, "forma_da_chave": _forma(chave)}
         if estado == "vivo":
             vivos.append(nome)
-        C.log(f"prova-de-fogo: {nome} → {estado} ({detalhe[:60]})")
+        C.log(f"prova-de-fogo: {nome} → {estado} ({detalhe[:60]}) · chave: {_forma(chave)}")
 
     try:
         C.escrever_remoto(ARQ, json.dumps({
