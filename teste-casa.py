@@ -575,6 +575,10 @@ if os.path.exists("desafio_exatidao.py"):
     ok("motivo do silêncio é declarado, não suposto", hasattr(_DX, "erro_de_portaria"))
     _fdx = open("desafio_exatidao.py", encoding="utf-8").read()
     ok("o desafio tem porta de entrada (__main__)", "print(medir())" in _fdx)
+    ok("régua do desafio e régua da cadeia são a mesma", _DX.REGUA == C_.REGUA_NOTA)
+    ok("histórico de régua antiga é descartado", not _DX.historico_aproveitavel({"regua": 1}))
+    ok("nota de plantão é a que ordena a cadeia", '"nota_plantao"' in open(
+        os.path.join(RAIZ, "comum.py"), encoding="utf-8").read())
 
 print("\n%d/%d verificações do estado da casa passaram" % (certos, certos + falhas))
 raise SystemExit(1 if falhas else 0)

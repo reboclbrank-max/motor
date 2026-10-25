@@ -99,6 +99,21 @@ checar("a medição guarda o motivo do silêncio", '"motivo": motivo' in _fonte)
 # Erro real desta rodada: a reescrita de medir() levou junto o bloco __main__ e o job
 # "passou" sem medir nada. Barreira que não pega isso não serve.
 checar("o desafio roda quando é chamado direto", "__main__" in _fonte and "print(medir())" in _fonte)
+# ---- régua versionada: mediana de réguas trocadas soma em vez de cortar ------------------
+checar("memória sem régua é tratada como régua 1", _D.regua_do_arquivo({}) == 1)
+checar("memória de hoje é aproveitável", _D.regua_do_arquivo({"regua": _D.REGUA}) == _D.REGUA)
+checar("histórico de régua velha é descartado",
+       not _D.historico_aproveitavel({"regua": 1, "motores": {"x": {"notas": [8]}}}))
+checar("histórico vazio nunca é problema", _D.historico_aproveitavel({"regua": _D.REGUA}))
+checar("a memória grava a régua que a produziu", '"regua": REGUA' in _fonte)
+checar("régua velha é declarada no log, não engolida", "descartada" in _fonte)
+# ---- a cadeia que o robô vai usar (consequência, não só medição) ------------------------
+_respondem, _reserva = _D.separar_cadeia([
+    {"motor": "Bom", "nota_plantao": 8}, {"motor": "Raspando", "nota_plantao": 4},
+    {"motor": "Fraco", "nota_plantao": 3}])
+checar("piso de 4 separa quem responde", [n for n, _ in _respondem] == ["Bom", "Raspando"])
+checar("abaixo do piso fica de reserva", [n for n, _ in _reserva] == ["Fraco"])
+checar("a cadeia de hoje é lida de volta da memória", "def cadeia_de_hoje(" in _fonte)
 
 print("\nteste-exatidao:", "PASSOU" if ok else "FALHOU")
 sys.exit(0 if ok else 1)

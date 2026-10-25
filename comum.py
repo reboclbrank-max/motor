@@ -3066,16 +3066,31 @@ def executar_ferramenta(tipo, argumento):
 
 # ================================================================ motores
 
+# Tem de acompanhar desafio_exatidao.REGUA. Nota de régua velha não entra na cadeia:
+# comparar acerto puro (régua 1) com acerto-e-presença (régua 2) é decidir com número errado.
+REGUA_NOTA = 2
+
+
 def _ranking_exatidao():
     """Ordem dos motores por nota no desafio de exatidão (medida, não opinião).
 
     Lê MEMORIA/exatidao-motores.json. Arquivo ausente devolve {} e a cadeia segue na ordem
-    de sempre — nunca quebra por falta de medida.
+    de sempre — nunca quebra por falta de medida. Memória de régua antiga também devolve {}:
+    é melhor liberar tudo com registro do que confiar em nota que mediu outra coisa.
     """
     try:
-        dados = json.loads(ler_remoto("MEMORIA/exatidao-motores.json", "{}") or "{}")
+        dados = json.loads(ler_remoto("MEMORIA/exatidao-motores.json", "{}") or "{}") or {}
+        try:
+            regua = int(dados.get("regua") or 1)
+        except Exception:
+            regua = 0
+        if regua != REGUA_NOTA:
+            if dados.get("ranking"):
+                log(f"ranking ignorado: régua {regua} na memória, a de hoje é {REGUA_NOTA}")
+            return {}
         ranking = dados.get("ranking") or []
-        return {item.get("motor"): int(item.get("acertos") or 0) for item in ranking if item.get("motor")}
+        return {item.get("motor"): int(item.get("nota_plantao", item.get("acertos") or 0) or 0)
+                for item in ranking if item.get("motor")}
     except Exception:
         return {}
 

@@ -146,12 +146,38 @@ def _perguntar(p, pergunta, tentativas=3):
     return None, erro
 
 
+# Versão da RÉGUA de nota. Muda sempre que a forma de calcular muda.
+# 1 = acertos / respondidas
+# 2 = a pior entre acerto e presença (falar pouco não é falar certo)
+# Histórico de régua diferente NÃO entra na mediana: 8/8 da régua velha e 4/8 da nova são
+# números de coisas diferentes, e misturar os dois é medir errado — pior que não medir.
+REGUA = 2
+
+
+def regua_do_arquivo(dados):
+    """Versão da régua que produziu aquela memória (memória antiga não declara: é 1)."""
+    if not isinstance(dados, dict):
+        return 0
+    try:
+        return int(dados.get("regua") or 1)
+    except Exception:
+        return 0
+
+
+def historico_aproveitavel(dados):
+    """True só quando o histórico guardado foi medido com a régua de hoje."""
+    return regua_do_arquivo(dados) == REGUA
+
+
 def _com_historico(nome, acertos, anterior):
-    """Nota final = MEDIANA das últimas 3 medições.
+    """Nota final = MEDIANA das últimas 3 medições da MESMA régua.
 
     Motivo medido: o g4f auto fez 8/8 numa rodada e 3/8 na seguinte, e o OpenRouter foi de
     8/8 para 5/8. Uma medição só derruba motor bom por azar de cota e promove motor ruim por
     sorte. Mediana de três corta os dois extremos.
+
+    E mediana de réguas trocadas não corta nada: soma. Quem chama precisa passar `anterior`
+    já filtrado por `historico_aproveitavel` — o filtro mora em medir(), junto do log.
     """
     hist = list((anterior.get(nome) or {}).get("notas") or [])
     hist = (hist + [acertos])[-3:]
@@ -224,9 +250,15 @@ def medir():
     """Passa o desafio em cada motor vivo, na ordem da cadeia."""
     global _INICIO
     _INICIO = time.time()
+    guardado = {}
     try:
-        anterior = json.loads(C.ler_remoto(ARQ, "{}") or "{}").get("motores") or {}
+        guardado = json.loads(C.ler_remoto(ARQ, "{}") or "{}") or {}
     except Exception:
+        guardado = {}
+    anterior = guardado.get("motores") or {}
+    if anterior and not historico_aproveitavel(guardado):
+        C.log(f"exatidão: histórico guardado é da régua {regua_do_arquivo(guardado)}, a de hoje "
+              f"é {REGUA} — mediana antiga descartada (número de régua velha não vale)")
         anterior = {}
     try:
         # TODA a cadeia, inclusive os que hoje são reserva: motor sem nota fica de reserva
@@ -299,6 +331,7 @@ def medir():
     try:
         C.escrever_remoto(ARQ, json.dumps({
             "quando": C.agora().isoformat(timespec="seconds"),
+            "regua": REGUA,
             "ranking": ranking, "detalhes": detalhes,
             "motores": {n: {"notas": d.get("notas"), "nota_final": d.get("nota_final"),
                             "honesto": d.get("honesto"), "motivo": d.get("motivo"),
@@ -322,6 +355,41 @@ def medir():
             f"{len(acima)} acima do piso, {mortos} fora do ar.")
 
 
+
+PISO_CADEIA = 4  # mesma régua do comum.py: abaixo disso o motor só entra na segunda passada
+
+
+def separar_cadeia(ranking):
+    """(respondem, reserva) aplicando o piso, do melhor para o pior."""
+    respondem, reserva = [], []
+    for item in ranking or []:
+        nota = int(item.get("nota_plantao", item.get("acertos") or 0) or 0)
+        (respondem if nota >= PISO_CADEIA else reserva).append((item.get("motor"), nota))
+    respondem.sort(key=lambda par: -par[1])
+    reserva.sort(key=lambda par: -par[1])
+    return respondem, reserva
+
+
+def cadeia_de_hoje():
+    """Lê de volta o que ficou gravado e diz quem o robô vai usar — como o responder lê.
+
+    Motivo: até aqui o log provava a MEDIÇÃO, não a CONSEQUÊNCIA. O dono já pagou por isso
+    uma vez (medida que vale no runner, não no meu terminal). Esta linha fecha o círculo:
+    o que o desafio grava é o que a cadeia obedece.
+    """
+    try:
+        dados = json.loads(C.ler_remoto(ARQ, "{}") or "{}") or {}
+    except Exception as e:
+        return f"cadeia: não consegui ler a memória ({str(e)[:60]})"
+    ranking = dados.get("ranking") or []
+    if not ranking:
+        return "cadeia: ranking vazio — a casa libera todos os motores e registra no log"
+    respondem, reserva = separar_cadeia(ranking)
+    lista = ", ".join(f"{nome} ({nota}/8)" for nome, nota in respondem) or "nenhum"
+    return (f"cadeia normal hoje: {lista} · {len(reserva)} na reserva "
+            f"(régua {regua_do_arquivo(dados)})")
+
 if __name__ == "__main__":
     print(medir())
+    print(cadeia_de_hoje())
     sys.exit(0)
