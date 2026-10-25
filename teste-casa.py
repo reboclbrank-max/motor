@@ -348,7 +348,8 @@ finally:
     R_._carregar = _r_original
 fonte_comum = open(os.path.join(RAIZ, "comum.py"), encoding="utf-8").read()
 ok("a cadeia aplica o rodízio antes de tentar",
-   "import rodizio as _rod" in fonte_comum and fonte_comum.index("_rod.ordenar") < fonte_comum.index("for p in ordenados"))
+   "import rodizio as _rod" in fonte_comum
+   and fonte_comum.index("_rod.ordenar") < fonte_comum.index("for p in lista"))
 ok("429 coloca o motor em quarentena", R_.QUARENTENA_429 >= 60)
 ok("quarentena não é para sempre (volta sozinho)", R_.QUARENTENA_429 <= 600)
 
@@ -522,6 +523,19 @@ _fonte_conf = open("confianca.py", encoding="utf-8").read()
 ok("motor bom não gasta segunda opinião", "nota >= NOTA_BAIXA and not motivos" in _fonte_conf)
 ok("resposta da conversa passa pela auditoria",
    "import confianca as _cf" in open("responder.py", encoding="utf-8").read())
+
+# 31. motor fraco não responde no caminho normal, e a pergunta aberta vai a consenso
+_fonte_cf2 = open("confianca.py", encoding="utf-8").read()
+ok("existe piso de nota na cadeia", "NOTA_MINIMA_CADEIA" in _fonte_cf2)
+ok("existe consenso entre motores", "def consenso(" in _fonte_cf2)
+ok("consenso aceita retorno de 2 ou 3 campos", "Aceita os dois" in _fonte_cf2)
+_fonte_resp2 = open("responder.py", encoding="utf-8").read()
+ok("conversa abre consenso com motor de nota baixa", "abrindo consenso" in _fonte_resp2)
+ok("rodapé avisa quando veio da reserva", "reserva, nota" in _fonte_resp2)
+_fonte_comum3 = open("comum.py", encoding="utf-8").read()
+ok("cadeia separa reserva por nota", "motores_de_confianca" in _fonte_comum3)
+ok("emergência só na segunda passada", "emergência: tentando os motores de nota baixa" in _fonte_comum3)
+ok("Gemini descobre o modelo na própria chave", "def modelos_gemini(" in _fonte_comum3)
 
 print("\n%d/%d verificações do estado da casa passaram" % (certos, certos + falhas))
 raise SystemExit(1 if falhas else 0)

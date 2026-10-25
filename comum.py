@@ -3101,8 +3101,12 @@ def montar_provedores():
     """Lista os motores disponíveis, na ordem de preferência."""
     provedores = []
     if GEMINI_KEY:
-        modelos = [GEMINI_MODELO] if GEMINI_MODELO else ["gemini-2.5-flash", "gemini-2.5-flash-lite"]
         for i, chave in enumerate([k.strip() for k in GEMINI_KEY.split(",") if k.strip()]):
+            # modelo: o que veio por secret, senão o catálogo da PRÓPRIA chave (o 404 do
+            # Gemini é nome de modelo vencido, não chave ruim)
+            modelos = [GEMINI_MODELO] if GEMINI_MODELO else modelos_gemini(chave)
+            if not modelos:
+                modelos = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.0-flash"]
             sufixo = f" #{i + 1}" if i else ""
             provedores.append({"nome": f"Gemini ({modelos[0]}){sufixo}", "id": f"gemini{i + 1}", "tipo": "gemini",
                                "base": "https://generativelanguage.googleapis.com", "chave": chave,
@@ -3318,6 +3322,40 @@ def montar_provedores():
     return provedores
 
 
+_GEMINI_CACHE = {}
+
+
+def modelos_gemini(chave, base="https://generativelanguage.googleapis.com"):
+    """Quais modelos esta chave realmente tem (GET /v1beta/models).
+
+    O 404 do Gemini não é chave inválida: é o nome do modelo, que muda de tempo em tempo
+    (gemini-2.5-flash sai, flash-latest entra). Perguntar ao provedor é mais confiável que
+    manter lista fixa — a lista fixa foi justamente o que deixou o Gemini fora do ar.
+    """
+    if chave in _GEMINI_CACHE:
+        return _GEMINI_CACHE[chave]
+    encontrados = []
+    try:
+        req = urllib.request.Request(base.rstrip("/") + "/v1beta/models", method="GET")
+        req.add_header("x-goog-api-key", chave)
+        with urllib.request.urlopen(req, timeout=30) as r:
+            dados = json.loads(r.read().decode("utf-8"))
+        for item in dados.get("models") or []:
+            metodos = item.get("supportedGenerationMethods") or []
+            if "generateContent" not in metodos:
+                continue
+            nome = (item.get("name") or "").replace("models/", "")
+            if nome:
+                encontrados.append(nome)
+    except Exception as e:
+        log(f"gemini: não consegui listar modelos ({str(e)[:60]})")
+    # flash primeiro (rápido e barato), depois pro; nomes mais curtos antes dos datados
+    encontrados.sort(key=lambda n: (0 if "flash" in n else (1 if "pro" in n else 2),
+                                    len(n), n))
+    _GEMINI_CACHE[chave] = encontrados[:4]
+    return _GEMINI_CACHE[chave]
+
+
 def _chamar_gemini(p, mensagens, system, modelo=None):
     modelo = modelo or p["modelo"]
     conteudo = []
@@ -3329,13 +3367,31 @@ def _chamar_gemini(p, mensagens, system, modelo=None):
         config["thinkingConfig"] = {"thinkingBudget": 0}
     corpo = {"systemInstruction": {"parts": [{"text": system}]}, "contents": conteudo,
              "generationConfig": config}
-    req = urllib.request.Request(f"{p['base']}/v1beta/models/{modelo}:generateContent",
-                                 data=json.dumps(corpo).encode("utf-8"), method="POST")
-    req.add_header("Content-Type", "application/json")
-    req.add_header("x-goog-api-key", p["chave"])
-    with urllib.request.urlopen(req, timeout=p.get("timeout", 90)) as r:
-        resp = json.loads(r.read().decode("utf-8"))
-    return "".join(parte.get("text", "") for parte in resp["candidates"][0]["content"]["parts"]).strip()
+    candidatos = [modelo] + [m for m in modelos_gemini(p["chave"], p["base"]) if m != modelo]
+    ultimo_erro = None
+    for nome_modelo in candidatos[:4]:
+        try:
+            req = urllib.request.Request(
+                f"{p['base']}/v1beta/models/{nome_modelo}:generateContent",
+                data=json.dumps(corpo).encode("utf-8"), method="POST")
+            req.add_header("Content-Type", "application/json")
+            req.add_header("x-goog-api-key", p["chave"])
+            with urllib.request.urlopen(req, timeout=p.get("timeout", 90)) as r:
+                resp = json.loads(r.read().decode("utf-8"))
+            texto = "".join(parte.get("text", "")
+                            for parte in resp["candidates"][0]["content"]["parts"]).strip()
+            if texto:
+                return texto
+        except urllib.error.HTTPError as e:
+            ultimo_erro = e
+            if e.code not in (400, 404):
+                raise  # não é nome de modelo: não adianta trocar
+        except Exception as e:
+            ultimo_erro = e
+            break
+    if ultimo_erro:
+        raise ultimo_erro
+    return ""
 
 
 def _chamar_openai(p, mensagens, system, modelo=None):
@@ -3552,6 +3608,13 @@ def chamar_llm(mensagens, system=None, forcar_teste=False, preferir=None, exclui
     system = system if system is not None else ""
     provedores = [p for p in montar_provedores() if not p.get("so_comite")]
     provedores = ordenar_por_exatidao(provedores)
+    # PISO DE NOTA: motor que errou demais no desafio não responde no caminho normal. Ele
+    # fica de reserva e só entra se todos os outros falharem — aí a resposta vai marcada.
+    try:
+        import confianca as _conf_mod
+    except Exception:
+        _conf_mod = None
+    _reserva_nota = []
     if excluir:
         provedores = [p for p in provedores if p["nome"] not in excluir]
     if not provedores:
@@ -3603,12 +3666,29 @@ def chamar_llm(mensagens, system=None, forcar_teste=False, preferir=None, exclui
     ultimo_erro = None
     reserva_recusa = None  # se TODOS se recusarem, devolve a menos bloqueada em vez de vazio
     # duas passadas: direta e, se tudo falhar, uma segunda com espera (motores grátis oscilam)
+    if _conf_mod is not None:
+        try:
+            _confiaveis, _reserva_nota = _conf_mod.motores_de_confianca(ordenados)
+            if _reserva_nota and _confiaveis:
+                log(f"piso de nota: {len(_reserva_nota)} motor(es) ficam de reserva "
+                    f"({', '.join(p['nome'] for p in _reserva_nota[:3])})")
+                ordenados = _confiaveis
+        except Exception as _e:
+            log(f"piso de nota não aplicado ({str(_e)[:60]})")
+
     for passada in range(2):
+        # Passada 2 = EMERGÊNCIA: só aqui os motores abaixo do piso entram na fila. A
+        # resposta deles vai marcada como tal (responder.py confere a nota do motor).
+        lista = ordenados
         if passada == 1:
-            log("segunda passada: aguardando 15s e tentando de novo")
-            time.sleep(15)
-            random.shuffle(ordenados) if len(ordenados) > 1 else None
-        for p in ordenados:
+            if _reserva_nota:
+                log("emergência: tentando os motores de nota baixa (reserva)")
+                lista = _reserva_nota + ordenados
+            else:
+                log("segunda passada: aguardando 15s e tentando de novo")
+                time.sleep(15)
+                random.shuffle(lista) if len(lista) > 1 else None
+        for p in lista:
             t0 = time.time()
             try:
                 texto = _chamar_provedor(p, mensagens, system)

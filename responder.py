@@ -925,6 +925,27 @@ def principal():
             except Exception as e:
                 C.log(f"conferência de número não usada ({str(e)[:70]})")
 
+        # CONSENSO em pergunta aberta: se quem respondeu não é motor de confiança (ou a
+        # pergunta é aberta e a resposta veio de reserva), a casa pergunta a mais de um e
+        # fica com a que a maioria sustenta. Antes, o primeiro a responder respondia.
+        if resposta and not resposta_falha and pergunta_pensar == "":
+            try:
+                import confianca as _cfc
+                _nota_quem = _cfc.nota_do_motor(motor_nome)
+                if _nota_quem is not None and _nota_quem < _cfc.NOTA_BAIXA and len(texto) < 400:
+                    C.log(f"resposta veio de motor de nota baixa ({_nota_quem}/8) — abrindo consenso")
+                    _cons = _cfc.consenso(texto, C.montar_system(numero))
+                    if _cons.get("resposta"):
+                        resposta = _cons["resposta"]
+                        motor_nome = _cons["motor"]
+                        C.log(f"consenso: {_cons['votos']} de {_cons['tentativas']} "
+                              f"sustentam {_cons['motor']}")
+                        if _cons.get("incerta"):
+                            resposta += ("\n\n⚠️ _Nenhum motor confirmou esta resposta: "
+                                         f"perguntei a {_cons['tentativas']} e eles divergiram._")
+            except Exception as e:
+                C.log(f"consenso não usado ({str(e)[:80]})")
+
         if resposta and not resposta_falha and pergunta_pensar == "":
             # RESPOSTA ABERTA também é auditada: nota do motor, sinais de risco (promessa de
             # ação que não foi feita, resposta vazia) e segunda opinião quando há dúvida.
@@ -948,7 +969,15 @@ def principal():
             if usos_extras:
                 usos = (usos or []) + usos_extras
             resposta, usos = garantir_memoria(texto, resposta, usos)
-            rodape = f"_(⏱ {segundos()} s · {motor_nome or 'modo direto, sem motor'}"
+            _rotulo_motor = motor_nome or 'modo direto, sem motor'
+            try:
+                import confianca as _cfr
+                _n = _cfr.nota_do_motor(motor_nome)
+                if _n is not None and _n < _cfr.NOTA_BAIXA:
+                    _rotulo_motor += f" ⚠️ reserva, nota {_n}/8"
+            except Exception:
+                pass
+            rodape = f"_(⏱ {segundos()} s · {_rotulo_motor}"
             if usos:
                 rodape += " · usei: " + "; ".join(usos)
             rodape += ")_"

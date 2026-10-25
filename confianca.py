@@ -30,6 +30,34 @@ RE_CERTEZA = re.compile(r"\b(com certeza|sem dúvida|garantido|é fato que|tenho
 
 LIMIAR_CONCORDANCIA = 0.35   # abaixo disso os dois motores estão falando coisas diferentes
 NOTA_BAIXA = 4               # de 8 no desafio: abaixo disso não é motor de confiança
+NOTA_MINIMA_CADEIA = 4       # motor abaixo disso não responde no caminho normal
+
+
+def motores_de_confianca(provedores, modo_emergencia=False):
+    """Separa a cadeia: quem tem nota suficiente responde; o resto fica de reserva.
+
+    É o fim do "o fraco pode responder": motor com nota abaixo de NOTA_MINIMA_CADEIA sai do
+    caminho normal. Ele continua existindo para o caso de todos os outros falharem — e aí a
+    resposta vai marcada como emergência, nunca como se fosse boa.
+    Devolve (confiaveis, reserva).
+    """
+    if modo_emergencia:
+        return list(provedores), []
+    notas = {}
+    try:
+        notas = C._ranking_exatidao()
+    except Exception:
+        notas = {}
+    if not notas:
+        return list(provedores), []   # sem medição não há como julgar: não piora nada
+    confiaveis, reserva = [], []
+    for p in provedores:
+        nota = notas.get(p.get("nome"))
+        if nota is None or nota >= NOTA_MINIMA_CADEIA:
+            confiaveis.append(p)      # nunca medido entra: a nota é o piso, não a certidão
+        else:
+            reserva.append(p)
+    return confiaveis, reserva
 
 
 def nota_do_motor(nome):
@@ -147,6 +175,65 @@ def aviso(resultado):
         linhas.append(f"- resposta alternativa de {resultado.get('segunda_motor')}: "
                       f"_{resultado['segunda'][:220]}_")
     return "\n".join(linhas)
+
+
+def consenso(pergunta, system="", quantos=3):
+    """Pergunta a vários motores e devolve a resposta que a maioria sustenta.
+
+    Usado quando a pergunta é aberta: em vez de aceitar quem chegar primeiro e avisar
+    depois, a casa pergunta a mais de um e compara. Critério, nesta ordem:
+    1. maioria por concordância (TF-IDF) — quem mais se parece com os outros vence;
+    2. empate desempatado pela NOTA medida do motor;
+    3. nada parecido com nada → devolve a de nota mais alta e marca como incerta.
+    Devolve dict: resposta, motor, votos, concordaram, nota, incerta, tentativas.
+    """
+    respostas = []
+    vistos = set()
+    for _ in range(quantos):
+        try:
+            retorno = C.chamar_llm(
+                [{"role": "user", "content": pergunta}], system,
+                excluir=tuple(r["motor"] for r in respostas if r["motor"]))
+            # chamar_llm devolve (texto, motor, erro) — mas degradar em silêncio quando vem
+            # outro formato já custou uma medição inteira neste projeto. Aceita os dois.
+            if isinstance(retorno, tuple):
+                texto = retorno[0] if retorno else None
+                motor = retorno[1] if len(retorno) > 1 else None
+            else:
+                texto, motor = retorno, None
+        except Exception as e:
+            C.log(f"consenso: chamada falhou ({str(e)[:70]})")
+            break
+        if not texto or motor in vistos:
+            break
+        vistos.add(motor)
+        respostas.append({"texto": texto, "motor": motor, "nota": nota_do_motor(motor)})
+
+    if not respostas:
+        return {"resposta": None, "motor": None, "votos": 0, "concordaram": [],
+                "nota": None, "incerta": True, "tentativas": 0}
+    if len(respostas) == 1:
+        unica = respostas[0]
+        return {"resposta": unica["texto"], "motor": unica["motor"], "votos": 1,
+                "concordaram": [unica["motor"]], "nota": unica["nota"],
+                "incerta": (unica["nota"] or 0) < NOTA_BAIXA, "tentativas": 1}
+
+    # matriz de concordância entre as respostas
+    apoio = {i: [] for i in range(len(respostas))}
+    for i in range(len(respostas)):
+        for j in range(i + 1, len(respostas)):
+            s = concordancia(respostas[i]["texto"], respostas[j]["texto"])
+            if s is not None and s >= LIMIAR_CONCORDANCIA:
+                apoio[i].append(j)
+                apoio[j].append(i)
+    melhor = max(range(len(respostas)),
+                 key=lambda i: (len(apoio[i]), respostas[i]["nota"] or 0))
+    escolhida = respostas[melhor]
+    concordaram = [escolhida["motor"]] + [respostas[j]["motor"] for j in apoio[melhor]]
+    return {"resposta": escolhida["texto"], "motor": escolhida["motor"],
+            "votos": len(apoio[melhor]) + 1, "concordaram": concordaram,
+            "nota": escolhida["nota"], "incerta": len(apoio[melhor]) == 0,
+            "tentativas": len(respostas)}
 
 
 def melhor_resposta(pergunta, resposta, motor, system=""):

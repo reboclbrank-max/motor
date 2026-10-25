@@ -92,5 +92,57 @@ checar("a nota vale sempre, não só em pergunta precisa",
        "_notas = _ranking_exatidao()" in fonte_comum)
 checar("nota é aplicada depois do rodízio", fonte_comum.index("rodizio") < fonte_comum.index("_notas = _ranking_exatidao()"))
 
+# ---- piso de nota: o fraco sai do caminho normal ---------------------------------------
+confiaveis, reserva = F.motores_de_confianca(
+    [{"nome": "Motor Forte"}, {"nome": "Motor Fraco"}, {"nome": "Motor Médio"},
+     {"nome": "Nunca Medido"}])
+checar("motor de nota baixa vai para a reserva",
+       [p["nome"] for p in reserva] == ["Motor Fraco"])
+checar("motor nunca medido não é punido",
+       "Nunca Medido" in [p["nome"] for p in confiaveis])
+checar("modo emergência devolve todos",
+       len(F.motores_de_confianca([{"nome": "Motor Fraco"}], modo_emergencia=True)[0]) == 1)
+
+# ---- consenso: a maioria decide --------------------------------------------------------
+_sequencia = [
+    ("Brasília é a capital, planejada e inaugurada em 1960.", "Motor Forte"),
+    ("Brasília foi planejada e inaugurada em 1960.", "Motor Médio"),
+    ("O Rio de Janeiro é a capital do Brasil.", "Motor Fraco"),
+]
+_iterador = {"i": 0}
+
+
+def llm_sequencia(mensagens, system=None, **kw):
+    i = _iterador["i"]
+    _iterador["i"] += 1
+    return _sequencia[i] if i < len(_sequencia) else (None, None, "fim")
+
+
+C.chamar_llm = llm_sequencia
+_iterador["i"] = 0
+resultado = F.consenso("qual a capital do Brasil?", "seja curto", quantos=3)
+checar("consenso escolhe a resposta que a maioria sustenta",
+       "Brasília" in (resultado["resposta"] or ""))
+checar("consenso registra os votos", resultado["votos"] >= 2)
+checar("consenso não escolhe o motor fraco", resultado["motor"] != "Motor Fraco")
+
+_sequencia2 = [
+    ("Resposta A sobre o tema, com detalhe.", "Motor Forte"),
+    ("Coisa totalmente diferente sobre peixes.", "Motor Médio"),
+    ("Outra coisa sem relação, sobre montanhas.", "Motor Fraco"),
+]
+_iterador["i"] = 0
+_sequencia = _sequencia2
+C.chamar_llm = lambda m, s=None, **kw: llm_sequencia(m, s, **kw)
+resultado = F.consenso("fale de alguma coisa", "", quantos=3)
+checar("sem concordância, o consenso se declara incerto", resultado["incerta"] is True)
+
+fonte2 = open("responder.py", encoding="utf-8").read()
+checar("conversa abre consenso quando a nota é baixa", "abrindo consenso" in fonte2)
+checar("rodapé mostra quando veio da reserva", "reserva, nota" in fonte2)
+fonte_c = open("comum.py", encoding="utf-8").read()
+checar("cadeia aplica o piso de nota", "motores_de_confianca" in fonte_c)
+checar("emergência é a segunda passada", "emergência: tentando os motores de nota baixa" in fonte_c)
+
 print("\nteste-confianca:", "PASSOU" if ok else "FALHOU")
 sys.exit(0 if ok else 1)
