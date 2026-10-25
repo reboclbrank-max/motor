@@ -61,12 +61,50 @@ def _acertou(resposta, esperado, tipo):
     return esperado.lower() in t
 
 
+AMOSTRA_MINIMA = 4   # abaixo disso a nota não vale: pouca resposta é sorte, não medida
+
+
+def nota_relativa(acertos, respondidas):
+    """Nota de 0 a 8 sobre o que o motor REALMENTE respondeu.
+
+    Defeito medido: o nemotron nano-omni acertou 5 de 5 perguntas que respondeu e levava
+    0/8 — porque a cota o calou nas outras. Isso não mede inteligência, mede cota alheia.
+    Nota = acertos / respondidas (escalada para 8), e só vale com amostra suficiente.
+    Devolve (nota, valida).
+    """
+    if respondidas < AMOSTRA_MINIMA:
+        return 0, False
+    return int(round(8.0 * acertos / respondidas)), True
+
+
 def _mediana(valores):
     v = sorted(valores)
     if not v:
         return 0
     meio = len(v) // 2
     return v[meio] if len(v) % 2 else round((v[meio - 1] + v[meio]) / 2)
+
+
+def _perguntar(p, pergunta, tentativas=3):
+    """Pergunta com paciência: 429/5xx ganham espera, porque limite passageiro não é burrice.
+
+    Sem isso, uma rajada de 429 num provedor grátis vira 0/8 na nota — e o piso de nota
+    manda o motor para a reserva por um motivo que era só o relógio.
+    """
+    for tentativa in range(tentativas):
+        if tentativa:
+            time.sleep(4 + 2 * tentativa)
+        try:
+            texto = C._chamar_provedor(p, [{"role": "user", "content": pergunta}],
+                                       "Responda de forma curta e direta.")
+            if isinstance(texto, str) and texto.strip():
+                return texto
+        except Exception as e:
+            msg = str(e)
+            if not any(x in msg for x in ("429", "502", "503", "504", "timed out", "Timeout")):
+                C.log(f"exatidão: {p.get('nome')} falhou ({msg[:60]})")
+                return None
+    return None
 
 
 def _com_historico(nome, acertos, anterior):
@@ -100,26 +138,18 @@ def medir():
         if nome in vistos:
             continue
         vistos.add(nome)
-        acertos, respostas, tempos = 0, {}, []
+        acertos, respondidas, respostas, tempos = 0, 0, {}, []
         for pergunta, esperado, tipo in DESAFIO:
             t0 = time.time()
-            try:
-                # _chamar_provedor devolve TEXTO (ou None). Já tentei desempacotar como
-                # tupla e a medição inteira saiu 0/8 por erro meu, não dos motores.
-                texto = C._chamar_provedor(p, [{"role": "user", "content": pergunta}],
-                                           "Responda de forma curta e direta.")
-                if not isinstance(texto, str):
-                    texto = None
-            except Exception as e:
-                C.log(f"exatidão: {nome} falhou ({str(e)[:70]})")
-                texto = None
+            texto = _perguntar(p, pergunta)
             tempos.append(round(time.time() - t0, 1))
             ok = bool(texto) and _acertou(texto, esperado, tipo)
             acertos += 1 if ok else 0
+            respondidas += 1 if texto else 0
             respostas[pergunta[:40]] = {"ok": ok, "veio": (texto or "")[:60]}
-            if not texto:
-                # motor fora do ar: não faz sentido insistir nas outras perguntas
-                break
+            time.sleep(1.2)  # espaçamento: rajada é o que estoura a cota dos grátis
+            if not texto and respondidas == 0 and len(tempos) >= 2:
+                break  # não respondeu nada em duas tentativas: fora do ar agora
         # honestidade: só faz sentido para quem respondeu algo
         honesto = None
         if respostas:
@@ -133,18 +163,22 @@ def medir():
                 texto = None
             honesto = bool(texto) and _acertou(texto, esperado, "fato")
         total = len(DESAFIO)
-        detalhes[nome] = {"acertos": acertos, "total": total, "honesto": honesto,
+        nota, valida = nota_relativa(acertos, respondidas)
+        detalhes[nome] = {"acertos": acertos, "respondidas": respondidas, "total": total,
+                          "nota_agora": nota, "amostra_valida": valida, "honesto": honesto,
                           "segundos_medios": round(sum(tempos) / len(tempos), 1) if tempos else None,
                           "respostas": respostas}
-        nota_final, hist = _com_historico(nome, acertos, anterior)
+        if not valida:
+            C.log(f"exatidão: {nome} respondeu só {respondidas}/{total} — sem amostra, fica de reserva")
+            continue
+        nota_final, hist = _com_historico(nome, nota, anterior)
         detalhes[nome]["nota_final"] = nota_final
         detalhes[nome]["notas"] = hist
-        if nota_final or acertos:
-            ranking.append({"motor": nome, "id": p.get("id"), "acertos": nota_final,
-                            "acertos_agora": acertos, "notas": hist,
-                            "total": total, "honesto": honesto})
-        C.log(f"exatidão: {nome} → {acertos}/{total}"
-              + (" · honesto" if honesto else "") )
+        ranking.append({"motor": nome, "id": p.get("id"), "acertos": nota_final,
+                        "acertos_agora": nota, "respondidas": respondidas,
+                        "notas": hist, "total": total, "honesto": honesto})
+        C.log(f"exatidão: {nome} → {nota}/8 (acertou {acertos} de {respondidas} que "
+              f"respondeu, {respondidas}/{total} no ar)" + (" · honesto" if honesto else ""))
 
     ranking.sort(key=lambda r: (-r["acertos"], r["motor"]))
     try:

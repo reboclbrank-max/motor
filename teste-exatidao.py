@@ -74,6 +74,12 @@ checar("mediana corta o azar de uma rodada", _D._mediana([8, 3, 8]) == 8)
 checar("mediana corta a sorte de uma rodada", _D._mediana([0, 0, 8]) == 0)
 checar("histórico guarda só as 3 últimas", _D._com_historico("x", 3, {"x": {"notas": [8, 8]}})[1] == [8, 8, 3])
 checar("motor novo entra com a própria nota", _D._com_historico("novo", 6, {})[0] == 6)
+# ---- nota sobre o que respondeu (o erro que mandava motor bom para a reserva) ----------
+checar("acertou tudo o que respondeu vale 8", _D.nota_relativa(5, 5) == (8, True))
+checar("acertou 3 de 5 vale 5", _D.nota_relativa(3, 5) == (5, True))
+checar("amostra pequena não vale nota", _D.nota_relativa(3, 3) == (0, False))
+checar("quem não respondeu nada não pontua", _D.nota_relativa(0, 0) == (0, False))
+checar("a medição espera antes de desistir (429 não é burrice)", "def _perguntar(" in open("desafio_exatidao.py", encoding="utf-8").read())
 
 print("\nteste-exatidao:", "PASSOU" if ok else "FALHOU")
 sys.exit(0 if ok else 1)

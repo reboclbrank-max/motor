@@ -555,5 +555,12 @@ _fonte_dx = open("desafio_exatidao.py", encoding="utf-8").read()
 ok("exatidão usa mediana das medições", "_mediana(" in _fonte_dx and "_com_historico" in _fonte_dx)
 ok("a medição guarda histórico por motor", '"motores": {' in _fonte_dx)
 
+# 34. nota é sobre o que o motor respondeu, com amostra mínima
+if os.path.exists("desafio_exatidao.py"):
+    import desafio_exatidao as _DX
+    ok("acertar tudo o que respondeu dá nota cheia", _DX.nota_relativa(5, 5) == (8, True))
+    ok("amostra pequena não vira nota", _DX.nota_relativa(3, 3)[1] is False)
+    ok("existe espera antes de desistir do motor", hasattr(_DX, "_perguntar"))
+
 print("\n%d/%d verificações do estado da casa passaram" % (certos, certos + falhas))
 raise SystemExit(1 if falhas else 0)
