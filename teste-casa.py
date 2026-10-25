@@ -509,5 +509,19 @@ _fonte_desafio = open("desafio_exatidao.py", encoding="utf-8").read()
 ok("desafio cobra honestidade (dizer que não sabe)", "NAO_SEI" in _fonte_desafio)
 ok("cadeia ordena por nota medida", "ordenar_por_exatidao" in open("comum.py", encoding="utf-8").read())
 
+# 30. resposta aberta é auditada: motor fraco não passa batido
+ok("confianca.py existe", os.path.exists("confianca.py"))
+ok("confianca tem teste próprio", os.path.exists("teste-confianca.py"))
+if os.path.exists("confianca.py"):
+    import confianca as _CF
+    ok("promessa de ação é risco grave",
+       any("promete uma ação" in m for m in
+           _CF.sinais_de_risco("oi", "Já publiquei no Instagram!", "qualquer")))
+    ok("a segunda opinião é comparada por similaridade", callable(_CF.concordancia))
+_fonte_conf = open("confianca.py", encoding="utf-8").read()
+ok("motor bom não gasta segunda opinião", "nota >= NOTA_BAIXA and not motivos" in _fonte_conf)
+ok("resposta da conversa passa pela auditoria",
+   "import confianca as _cf" in open("responder.py", encoding="utf-8").read())
+
 print("\n%d/%d verificações do estado da casa passaram" % (certos, certos + falhas))
 raise SystemExit(1 if falhas else 0)

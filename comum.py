@@ -3545,13 +3545,13 @@ def chamar_llm(mensagens, system=None, forcar_teste=False, preferir=None, exclui
     """Tenta os motores na ordem, trocando automaticamente quando um falha.
 
     `preferir` coloca um motor no topo (orquestrador); `excluir` tira motores da fila.
-    `preciso=True` reordena pela NOTA do desafio de exatidão: quando a pergunta tem número
-    e errar custa caro, quem acerta mais responde primeiro — medido, não suposto.
+    A NOTA do desafio de exatidão vale sempre (não só em `preciso`): motor que acerta mais
+    responde primeiro, e o fraco só entra quando todos os melhores falharem. `preciso=True`
+    continua existindo para marcar no log que a pergunta tem número.
     Devolve (texto, provedor_usado, erro_final)."""
     system = system if system is not None else ""
     provedores = [p for p in montar_provedores() if not p.get("so_comite")]
-    if preciso:
-        provedores = ordenar_por_exatidao(provedores)
+    provedores = ordenar_por_exatidao(provedores)
     if excluir:
         provedores = [p for p in provedores if p["nome"] not in excluir]
     if not provedores:
@@ -3590,6 +3590,13 @@ def chamar_llm(mensagens, system=None, forcar_teste=False, preferir=None, exclui
         log(f"rodízio não aplicado ({str(e)[:80]})")
     if diag.get("ultimo_provedor"):
         ordenados.sort(key=lambda p: 0 if p["id"] == diag["ultimo_provedor"] else 1)
+    # NOTA MEDIDA manda na qualidade: motor que acerta mais responde primeiro. Vem depois
+    # do rodízio (que ordena por LRU e apagaria a nota) e é reordenado pela saúde em
+    # seguida, para motor doente não voltar à frente só porque tem nota alta.
+    _notas = _ranking_exatidao()
+    if _notas:
+        ordenados.sort(key=lambda p: -_notas.get(p["nome"], 0))
+        ordenados.sort(key=lambda p: prioridade(p)[0])
     if preferir:
         ordenados.sort(key=lambda p: 0 if p["nome"] == preferir else 1)
 

@@ -925,6 +925,24 @@ def principal():
             except Exception as e:
                 C.log(f"conferência de número não usada ({str(e)[:70]})")
 
+        if resposta and not resposta_falha and pergunta_pensar == "":
+            # RESPOSTA ABERTA também é auditada: nota do motor, sinais de risco (promessa de
+            # ação que não foi feita, resposta vazia) e segunda opinião quando há dúvida.
+            # Sem isso, o motor fraco respondia conversa aberta sem ninguém saber que era ele.
+            try:
+                import confianca as _cf
+                _antes = motor_nome
+                resposta, motor_nome, _aval = _cf.melhor_resposta(
+                    texto, resposta, motor_nome, C.montar_system(numero))
+                if _aval.get("confianca") == "baixa":
+                    C.log(f"resposta de confiança baixa ({'; '.join(_aval.get('motivos') or [])[:120]})")
+                if _aval.get("motivos"):
+                    resposta = resposta + _cf.aviso(_aval)
+                elif motor_nome != _antes:
+                    C.log(f"resposta trocada: {_antes} → {motor_nome} (nota melhor)")
+            except Exception as e:
+                C.log(f"confiança não usada ({str(e)[:80]})")
+
         if resposta:
             resposta, usos_extras = executar_comandos_soltos(resposta)
             if usos_extras:
