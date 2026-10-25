@@ -258,7 +258,8 @@ ok("o teste de saúde não usa mais o 'responda OK'",
    'content": "Responda apenas: OK"' not in fonte_comum and "provar_motor(p)" in fonte_comum)
 ok("motor sem cérebro sai da frente da fila", "sem_cerebro" in fonte_comum)
 fonte_resp = open(os.path.join(RAIZ, "responder.py"), encoding="utf-8").read()
-ok("existe o comando !motores", "def motores_cmd" in fonte_resp and "motores|motor" in fonte_resp)
+ok("existe o comando de motores, aceitando !motores e /motores",
+   "def motores_cmd" in fonte_resp and r"^[!/]?(?:motores|motor" in fonte_resp)
 # A sonda tem de existir aqui; o workflow que a executa vive no repositório PÚBLICO
 # (minutos ilimitados). No privado basta a sonda, que é chamada pelo workflow público.
 _tem_sonda = os.path.exists(os.path.join(RAIZ, "testar-motores.py"))

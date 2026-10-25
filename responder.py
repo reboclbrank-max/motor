@@ -652,7 +652,7 @@ def principal():
              lambda _a: janelas_cmd()),
             (r"^/?(?:cacar|caçar)\s*:?\s*$", "🏹", "caçada de motores", lambda _a: cacar_cmd()),
             (r"^/?(?:pagos|pagas)\s*:?\s*$", "💳", "mapa de pagos", lambda _a: pagos_cmd()),
-            (r"^/?(?:motores|motor|engines)\s*:?\s*$", "⚙️", "motores", lambda _a: motores_cmd()),
+            (r"^[!/]?(?:motores|motor|engines)\s*:?\s*$", "⚙️", "motores", lambda _a: motores_cmd()),
             (r"^/?(?:melhorias)\s*:?\s*$", "", "melhorias", lambda _a: C.ferramenta_melhorias()),
             (r"^/?(?:panorama|resumir)\s*:?\s*$", "", "panorama",
              lambda _a: C.resumir_memoria() if "resumir" in texto.lower() else C.ferramenta_panorama()),
