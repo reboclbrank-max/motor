@@ -144,3 +144,36 @@ jobs:
           PAT_MEMORIA: ${{ secrets.PAT_MEMORIA }}
           REPO_MEMORIA: ${{ secrets.REPO_MEMORIA }}
         run: python3 sincronizar.py subir
+
+  colher:
+    # Usa o censo que já existe na casa: 410 motores sem chave, dos quais o código usava ~12.
+    # Cada execução testa um lote e guarda o progresso, então continua de onde parou.
+    needs: testar
+    if: always() && (github.event_name == 'schedule' || github.actor == 'reboclbrank-max')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Baixar a memória (traz o censo)
+        env:
+          PAT_MEMORIA: ${{ secrets.PAT_MEMORIA }}
+          REPO_MEMORIA: ${{ secrets.REPO_MEMORIA }}
+        run: python3 sincronizar.py baixar
+      - name: Colher motores do censo
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_MEMORIA }}
+          PAT_MEMORIA: ${{ secrets.PAT_MEMORIA }}
+          REPO_CONVERSAS: ${{ secrets.REPO_MEMORIA }}
+          LLM7_API_KEY: ${{ secrets.LLM7_API_KEY }}
+          LOTE_CATALOGO: '60'
+          WORKERS_CATALOGO: '6'
+        run: python3 colher-catalogo.py 60
+      - name: Devolver o resultado
+        if: always()
+        env:
+          PAT_MEMORIA: ${{ secrets.PAT_MEMORIA }}
+          REPO_MEMORIA: ${{ secrets.REPO_MEMORIA }}
+        run: python3 sincronizar.py subir
