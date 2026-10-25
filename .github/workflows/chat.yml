@@ -67,7 +67,13 @@ jobs:
           python3 -m pip install --quiet --extra-index-url \
             https://abetlen.github.io/llama-cpp-python/whl/cpu llama-cpp-python \
             || echo "sem llama-cpp: o Chat segue só com os remotos"
-          python3 -c "import motor_local; print('motor local:', motor_local.info())"
+          # Baixa agora (não no meio da resposta): o arquivo fica no cache entre execuções.
+          python3 -c "
+          import motor_local
+          print('antes:', motor_local.info())
+          motor_local.baixar()
+          print('depois:', motor_local.info())
+          "
 
       - name: Barreira offline (sem rede, sem segredo)
         run: python3 teste-casa.py

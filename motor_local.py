@@ -34,15 +34,20 @@ _falhou = False
 
 
 def disponivel():
-    """Verdadeiro só quando dá para usar de fato (biblioteca + modelo no disco)."""
+    """Verdadeiro quando dá para usar: a biblioteca existe e o modelo está no disco ou pode
+    ser baixado agora.
+
+    BUG CORRIGIDO (25/10): antes exigia o arquivo já baixado, e o download só acontecia na
+    hora de carregar — condição circular. Resultado: `pronto: False` para sempre e o motor
+    local nunca entrava, mesmo com a biblioteca instalada.
+    """
     if _falhou:
         return False
     try:
         import llama_cpp  # noqa: F401
     except Exception:
         return False
-    caminho = os.path.join(CACHE, ARQUIVO)
-    return os.path.exists(caminho) and os.path.getsize(caminho) > MIN_BYTES
+    return True
 
 
 def baixar():
@@ -104,7 +109,13 @@ def responder(pergunta, system="", max_tokens=420, timeout_s=120):
 def info():
     """Para o comando !motores: se está pronto e qual modelo."""
     caminho = os.path.join(CACHE, ARQUIVO)
+    tem_modelo = os.path.exists(caminho) and os.path.getsize(caminho) > MIN_BYTES
     pronto = disponivel()
     tamanho = os.path.getsize(caminho) // 1_000_000 if os.path.exists(caminho) else 0
+    motivo = ""
+    if not pronto:
+        motivo = "biblioteca llama-cpp ausente"
+    elif not tem_modelo:
+        motivo = "modelo será baixado no primeiro uso"
     return {"arquivo": ARQUIVO, "pronto": pronto, "mb": tamanho,
-            "motivo": "" if pronto else ("biblioteca ausente" if _falhou else "modelo não baixado")}
+            "baixado": tem_modelo, "motivo": motivo}
