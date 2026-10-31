@@ -215,7 +215,30 @@ def comentar(numero, texto, autor=None):
     corpo = texto or ""
     if MARCA_DO_ROBO not in corpo and "<!--resp:" not in corpo:
         corpo = corpo.rstrip() + f"\n\n{MARCA_DO_ROBO}{(autor or 'casa')}-->"
-    gh("POST", f"/repos/{REPO}/issues/{numero}/comments", {"body": corpo})
+    return gh("POST", f"/repos/{REPO}/issues/{numero}/comments", {"body": corpo})
+
+
+def comentario_com_id(numero, texto, autor=None):
+    """Publica e devolve o id do comentário (None se não deu)."""
+    try:
+        r = comentar(numero, texto, autor=autor)
+        return (r or {}).get("id") if isinstance(r, dict) else None
+    except Exception as e:  # noqa: BLE001
+        log(f"comentário: não consegui publicar ({type(e).__name__}: {str(e)[:100]})")
+        return None
+
+
+def editar_comentario(comment_id, texto, autor=None):
+    """Reescreve um comentário já publicado (usa o mesmo id — nada de duplicar)."""
+    corpo = texto or ""
+    if MARCA_DO_ROBO not in corpo and "<!--resp:" not in corpo:
+        corpo = corpo.rstrip() + f"\n\n{MARCA_DO_ROBO}{(autor or 'casa')}-->"
+    try:
+        gh("PATCH", f"/repos/{REPO}/issues/comments/{comment_id}", {"body": corpo})
+        return True
+    except Exception as e:  # noqa: BLE001
+        log(f"comentário: não consegui editar o aviso ({type(e).__name__}: {str(e)[:100]})")
+        return False
 
 
 # ================================================================ memória
