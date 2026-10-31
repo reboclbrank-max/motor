@@ -578,6 +578,35 @@ def drenar_fila_respostas():
         C.fila_respostas_salvar(restantes)
 
 
+def atalho_serve(pergunta, resposta, rotulo):
+    """O atalho responde à pergunta? — medido antes de publicar, nunca levanta.
+
+    DEFEITO MEDIDO (31/10/2026, conversa #75): a pergunta foi "quantos jogos a casa tem
+    publicados e qual é o próximo passo do roadmap?". Dois atalhos saíram na frente do motor,
+    porque casam com uma palavra da frase:
+      * `casa.pede_decisao` casa em "próximo passo"  → devolveu o relatório de retorno por post;
+      * `dados.resposta_direta` casa em "quantos/publicados" → devolveu números de outro assunto.
+    Nos dois casos: verdadeiro, rápido e fora da pergunta. Atalho que erra o assunto é pior que
+    espera, então todo atalho passa por aqui; se não cobrir a pergunta, o motor responde.
+    """
+    if not (resposta or "").strip():
+        return False
+    if os.environ.get("REFORCO_RELEVANCIA", "1") == "0":
+        return True
+    try:
+        import relevancia as _rel_a
+        nota = _rel_a.cobre(pergunta, resposta)["nota"]
+        if _rel_a.aproveitar_atalho(pergunta, resposta):
+            C.log(f"relevância: atalho '{rotulo}' cobriu {nota:.0%} da pergunta — publicando")
+            return True
+        C.log(f"relevância: atalho '{rotulo}' cobriu {nota:.0%} da pergunta — deixei o motor "
+              f"responder em vez de publicar assunto vizinho")
+        return False
+    except Exception as e:  # noqa: BLE001
+        C.log(f"relevância do atalho '{rotulo}' não medida ({type(e).__name__}: {str(e)[:80]})")
+        return True
+
+
 def principal():
     t_inicio = time.time()
 
@@ -649,7 +678,7 @@ def principal():
                 _placar_txt = C.ler_de("site", "posts/placar-metas.md", "")
                 _des_txt = C.ler_de("site", "posts/desempenho.md", "")
                 _analise = _casa.analise(_placar_txt, _des_txt)
-                if _analise:
+                if _analise and atalho_serve(texto, _analise, "análise da casa"):
                     responder(numero, _analise, marca)
                     return 0
         except Exception as e:
@@ -813,6 +842,10 @@ def principal():
             cache = C.cache_exato(texto)
         except Exception:
             cache = None
+        # O cache também é atalho: se o que está guardado não responde à pergunta (foi resposta
+        # errada de um dia ruim), ele não é reutilizado — o motor responde e sobrescreve a entrada.
+        if cache and not atalho_serve(texto, cache, "cache exato"):
+            cache = None
         if cache:
             responder(numero, cache + "\n\n---\n\n_(🗄 do meu cache — você já fez essa pergunta)_", marca)
             C.registrar_diario(f"- **{C.agora().strftime('%d/%m %H:%M')}** — dono: "
@@ -846,21 +879,9 @@ def principal():
             if _direta:
                 # O atalho é rápido (3 s contra ~2 min do motor), mas rápido não basta: em
                 # 31/10/2026 ele respondeu com um assunto vizinho. Mede antes de publicar.
-                _serve, _nota_d = True, None
-                if os.environ.get("REFORCO_RELEVANCIA", "1") != "0":
-                    try:
-                        import relevancia as _rel_d
-                        _nota_d = _rel_d.cobre(texto, _direta)["nota"]
-                        _serve = _rel_d.aproveitar_atalho(texto, _direta)
-                    except Exception as e:
-                        C.log(f"relevância do atalho não medida ({type(e).__name__}: {str(e)[:80]})")
-                if _serve:
-                    if _nota_d is not None:
-                        C.log(f"relevância: atalho cobriu {_nota_d:.0%} da pergunta — publicando")
+                if atalho_serve(texto, _direta, "consulta de número"):
                     responder(numero, _direta, marca)
                     return 0
-                C.log(f"relevância: atalho cobriu {_nota_d:.0%} da pergunta — deixei o motor "
-                      f"responder em vez de publicar assunto vizinho")
         except Exception as e:
             C.log(f"resposta direta não usada ({str(e)[:80]})")
         # EXATIDÃO SEM MOTOR: conta, data, conversão e porcentagem saem daqui, exatas.

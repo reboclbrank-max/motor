@@ -108,10 +108,15 @@ ok("o atalho que responde à pergunta é aceito",
 ok("atalho vazio não é aceito", not R.aproveitar_atalho(PERGUNTA, ""))
 ok("o atalho é recusado com a mesma nota que a resposta do motor (sem régua dupla)",
    R.fora_do_assunto(PERGUNTA, _ATALHO) == (not R.aproveitar_atalho(PERGUNTA, _ATALHO)))
-ok("o responder mede o atalho antes de publicar", "_rel_d.aproveitar_atalho(texto, _direta)" in _fonte)
+ok("o responder mede TODO atalho por um único medidor",
+   "def atalho_serve(" in _fonte and _fonte.count("atalho_serve(texto,") >= 3)
 ok("o responder deixa o motor responder quando o atalho está fora do assunto",
    "deixei o motor" in _fonte)
-ok("o atalho recusado fica registrado no log", "relevância: atalho cobriu" in _fonte)
+ok("o atalho recusado fica registrado no log", "relevância: atalho '" in _fonte)
+ok("a análise da casa (que casou em 'próximo passo') passa pela medida",
+   'atalho_serve(texto, _analise, "análise da casa")' in _fonte)
+ok("o cache exato também passa pela medida (não repete resposta errada)",
+   'atalho_serve(texto, cache, "cache exato")' in _fonte)
 
 print()
 if FALHAS:
