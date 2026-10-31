@@ -70,3 +70,21 @@ verde: `teste-casa` 156/156, `teste-chat`, `teste-cerebro`, `teste-fila`, `teste
 | 5 | **Resposta em pedaços (streaming)** | a espera de 2 min parece 10 sem sinal de vida; publicar "pensando…" e ir completando reduz a sensação de travado | médio |
 
 Nada aqui é opinião de marketing: cada linha saiu de um número medido nesta rodada.
+
+## As 5 melhorias — fechadas, com a prova de cada uma (rodada 127, ainda 31/10/2026)
+
+| # | melhoria | como foi fechada | prova medida |
+| --- | --- | --- | --- |
+| 1 | **Cérebro fora do repositório bloqueado** | 27 workflows **com `cron`** do repositório privado `agente` tiveram o bloco `schedule:` desativado (motivo medido: 40 de 40 runs vermelhos por falha de pagamento — *"recent account payments have failed"*); os 12 sem cron ficaram intactos. `bom-dia` — o único com cron que **não** existia no `motor` — foi portado para `motor-work/.github/workflows/bom-dia.yml` | `agente`: **0 agendado** depois da mudança. `bom-dia` no `motor`: run `41157237293` = `success`, log com `📧 E-mail enviado` e `📦 Pacote Instagram enviado` |
+| 2 | **Resposta que responde à pergunta** | `relevancia.py` (cobertura por termos, sem modelo) + **todo atalho** passa por `atalho_serve()` — `casa.pede_decisao`, `dados.resposta_direta`, `cache_exato` — e o motor tem uma segunda tentativa reforçada. Commits `350ec38`, `46d6ae1`, `152b768` | Log real do run `41157729268`: `relevância: atalho 'análise da casa' cobriu 40% da pergunta — deixei o motor responder` → `relevância: resposta cobriu 100%`. A mesma pergunta que antes voltava com o relatório de Bluesky agora volta com **"A casa tem 2 jogos publicados: Ceifalume 0.1 e Prancheta 0.1"** + roadmap |
+| 3 | **Fila visível na tela** | `pensando()` ganhou **relógio andando** e as faixas medidas (`FILA_MEDIDA`): típico ~2 min com o motor acordado; sem acordar, mediana 198,5 min e p90 379 min | PR **#55** mergeado (`chat` `main` = `3c00761`), `testes` = success, barreira **112/112**; página publicada servindo `⏱ na fila há …` |
+| 4 | **Uma conversa por assunto (aviso ≠ conversa)** | cartão com `label: aviso` ganha etiqueta 📣, estilo próprio e vai **para o fim** da lista; a faixa conta `N conversas · M avisos da casa` | medição: **30 de 31 cartões** eram aviso da casa. PR **#55**, teste novo `fila-visivel-e-avisos.js` (13/13) |
+| 5 | **Resposta em pedaços (sinal de vida)** | o aviso nasce em segundos e é **reescrito no mesmo comentário** no fim; agora também há **batida a cada 45 s** (`BatidaDoPensando`) dizendo há quanto tempo e em que etapa está — o motor devolve a resposta inteira de uma vez, então token a token não existe: o que dá para publicar é o tempo e a etapa | prova HTTP real: comentário criado `02:58:14`, editado `02:58:21` com `🧠 ainda pensando… há 6 s · teste de sinal de vida` (mesmo id, nenhum comentário novo). `teste-pensando.py` **21/21** |
+
+**Sinal de vida do aviso em produção:** conversa #76 (run do `chat` disparado por `repository_dispatch`) → **1 comentário só**: nasceu "🧠 pensando…" e foi reescrito na resposta em 23 s, sem duplicata.
+
+### Tropeço honesto desta rodada
+
+O merge #55 levou junto um **link simbólico `node_modules`** criado por engano no ambiente local. O `tar --dereference` do Pages falhou (`tar: ./node_modules: File removed before we read it`) e **a publicação do site parou** (run `41160786207` = `failure`). Corrigido no PR **#56**: link removido, `.gitignore` com `node_modules/` **e** `node_modules`, e verificação permanente no teste (falha se um link desses voltar). Pages voltou a publicar (`41161764584` = `success`).
+
+**Barreira do motor:** `teste-relevancia` 36/36 · `teste-pensando` 21/21 · `teste-varredura` 24/24 · `teste-casa` 156/156 · `teste-chat`, `teste-fila`, `teste-cerebro`, `teste-v37`, `teste-responder-emergencia` OK — todas na barreira `testes.yml`.
