@@ -222,7 +222,10 @@ def pensar_bem_com_ferramentas(resposta, numero, motor_nome):
 def cacar_cmd():
     """Dispara a caça de motores AGORA — o GitHub sorteia um IP novo."""
     try:
-        C.gh("POST", f"/repos/{C.REPO}/actions/workflows/caca-motores.yml/dispatches", {"ref": "main"})
+        # O workflow mora no repositório do CÓDIGO (público). Mirar no repositório das
+        # conversas devolvia 404 e o comando "caçar" nunca caçava (medido em 31/10/2026).
+        C.gh("POST", f"/repos/{C.REPO_ROBO}/actions/workflows/caca-motores.yml/dispatches",
+             {"ref": "main"})
         return ("🏹 **Caçada disparada!** O GitHub sorteia um IP novo e sonda todos os motores "
                 "(~4 min). Depois digite `janelas:` pra ver o que o IP novo trouxe.")
     except Exception as e:

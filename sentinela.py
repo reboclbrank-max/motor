@@ -135,11 +135,16 @@ def perguntas_sem_resposta(diag):
 
 
 def disparar_reprocessamento(item, diag):
+    """Pede ao robô outra rodada de varredura.
+
+    DEFEITO MEDIDO (31/10/2026): este dispatch mirava `C.REPO` (o repositório das CONVERSAS),
+    onde o chat.yml não existe — e mandava `inputs` que o chat.yml não declara, o que devolve
+    422 e não roda nada. Dois erros somados: o "reprocessamento" do sentinela nunca aconteceu.
+    Agora vai para o repositório do CÓDIGO, sem inputs: a varredura pega a fila inteira
+    (inclusive o item que o sentinela viu).
+    """
     try:
-        C.gh("POST", f"/repos/{C.REPO}/actions/workflows/chat.yml/dispatches", {
-            "ref": "main",
-            "inputs": {"issue": str(item["numero"]), "comment_id": str(item["comentario_id"])},
-        })
+        C.gh("POST", f"/repos/{C.REPO_ROBO}/actions/workflows/chat.yml/dispatches", {"ref": "main"})
         diag.setdefault("reprocessados", {})[item["comentario_id"]] = \
             diag["reprocessados"].get(item["comentario_id"], 0) + 1
         C.log(f"reprocessamento disparado: conversa #{item['numero']} comentário {item['comentario_id']}")

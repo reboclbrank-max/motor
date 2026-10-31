@@ -198,6 +198,34 @@ ok("o dispatch vai para o repositório do robô",
 ok("o repositório do código é público e separado das conversas", C.REPO_ROBO != C.REPO,
    (C.REPO_ROBO, C.REPO))
 
+print("== 5. todo dispatch mira o repositório do CÓDIGO (não o das conversas)")
+import re as _re
+_arquivos = ["varrer.py", "sentinela.py", "responder.py", "casa.py"]
+_errados = []
+for _nome in _arquivos:
+    _texto = open(Path(__file__).resolve().parent / _nome, encoding="utf-8").read()
+    for _m in _re.finditer(r"/repos/\{C\.REPO\}/actions/workflows/([a-z0-9-]+)\.yml/dispatches",
+                           _texto):
+        _errados.append((_nome, _m.group(1)))
+ok("nenhum dispatch mira o repositório das conversas", not _errados, _errados)
+
+_pedidos = []
+_orig_gh2 = C.gh
+C.gh = lambda metodo, caminho, dados=None: (_pedidos.append((caminho, dados)) or {})
+try:
+    _sentinela = __import__("sentinela")
+    _sentinela.disparar_reprocessamento({"numero": 1, "comentario_id": 2}, {"reprocessados": {}})
+    import responder as _R
+    _R.cacar_cmd()
+finally:
+    C.gh = _orig_gh2
+ok("o sentinela pede a rodada no repositório do código",
+   _pedidos and C.REPO_ROBO in _pedidos[0][0], _pedidos[:1])
+ok("o pedido do sentinela não manda inputs que o workflow não declara",
+   _pedidos and set(_pedidos[0][1].keys()) == {"ref"}, _pedidos[:1])
+ok("o comando caçar dispara no repositório do código",
+   len(_pedidos) > 1 and C.REPO_ROBO in _pedidos[1][0], _pedidos[1:2])
+
 print()
 if FALHAS:
     print("%d de %d verificações da varredura FALHARAM" % (len(FALHAS), len(CERTOS) + len(FALHAS)))
