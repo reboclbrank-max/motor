@@ -38,6 +38,9 @@ GH_TOKEN = os.environ.get("GITHUB_TOKEN", "").strip()
 # comportamento é o de sempre.
 REPO = (os.environ.get("REPO_CONVERSAS") or os.environ.get("GITHUB_REPOSITORY")
         or "reboclbrank-max/agente").strip()
+# Onde o CÓDIGO roda (público, minutos ilimitados). É para cá que a varredura pede a próxima
+# rodada: dispatch no repositório das conversas não acharia o workflow (ele mora aqui).
+REPO_ROBO = (os.environ.get("REPO_ROBO") or "reboclbrank-max/motor").strip()
 
 # Prefixos que identificam chave de verdade, por provedor. Serve para decidir quando um
 # blob base64 terminou de ser decodificado.
@@ -195,8 +198,24 @@ def gh(metodo, caminho, corpo=None):
         raise RuntimeError(f"GitHub API {metodo} {caminho} → HTTP {e.code}: {detalhe}") from None
 
 
-def comentar(numero, texto):
-    gh("POST", f"/repos/{REPO}/issues/{numero}/comments", {"body": texto})
+MARCA_DO_ROBO = "<!--robo:"      # toda fala da automação carrega esta marca invisível
+
+
+def comentar(numero, texto, autor=None):
+    """Publica um comentário na conversa. TODA fala da casa sai marcada como da CASA.
+
+    POR QUE A MARCA (31/10/2026, medido): a automação publica com o MESMO login do dono, então
+    a varredura não tinha como distinguir "mensagem do dono" de "aviso do próprio robô" — e
+    respondia a si mesma. A fila aparecia com 15 pendentes que eram, na verdade, boletins e
+    pilotos automáticos falando sozinhos: cota de LLM gasta e conversa com ruído para o dono
+    ler. A marca invisível resolve na origem, num lugar só (aqui): quem publica é a casa.
+
+    Um comentário que já tem marca (`<!--resp:...-->` ou `<!--robo:...-->`) não ganha outra.
+    """
+    corpo = texto or ""
+    if MARCA_DO_ROBO not in corpo and "<!--resp:" not in corpo:
+        corpo = corpo.rstrip() + f"\n\n{MARCA_DO_ROBO}{(autor or 'casa')}-->"
+    gh("POST", f"/repos/{REPO}/issues/{numero}/comments", {"body": corpo})
 
 
 # ================================================================ memória

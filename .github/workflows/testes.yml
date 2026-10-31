@@ -39,7 +39,8 @@ jobs:
           for t in teste-casa.py teste-chat.py teste-cerebro.py teste-orquestrador.py \
                    teste-fila.py teste-estudo.py teste-palcos.py teste-piloto.py \
                    teste-semantica.py teste-caca.py teste-divulgacao.py teste-v37.py \
-                   teste-responder-emergencia.py teste-vitrine.py teste-exatidao.py teste-confianca.py; do
+                   teste-responder-emergencia.py teste-vitrine.py teste-exatidao.py teste-confianca.py \
+                   teste-varredura.py; do
             if [ -f "$t" ]; then
               printf '\n=== %s ===\n' "$t"
               python3 "$t" || falhas=$((falhas+1))
