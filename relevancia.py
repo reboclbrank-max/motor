@@ -120,3 +120,17 @@ def melhor(pergunta, candidatos):
     avaliados.sort(key=lambda x: -x[0])
     nota, texto, rotulo = avaliados[0]
     return texto, rotulo, {"nota": nota, "avaliados": [(r, n) for n, _t, r in avaliados]}
+
+def aproveitar_atalho(pergunta, resposta, limite=None):
+    """Um atalho (resposta pronta, sem modelo) só serve se responder à pergunta.
+
+    DEFEITO MEDIDO (31/10/2026, conversa #75): o atalho `dados.resposta_direta` respondeu em 3 s
+    a "quantos jogos a casa tem publicados e qual é o próximo passo do roadmap?" com o relatório
+    de retorno por tipo de post. Números verdadeiros, pergunta não respondida — e o atalho é mais
+    rápido que o motor, então saía na frente de qualquer checagem que ficasse depois dele.
+    Aqui a checagem vem ANTES de publicar: se o atalho não cobre a pergunta, ele não é usado e a
+    conversa segue para o motor.
+    """
+    if not (resposta or "").strip():
+        return False
+    return not fora_do_assunto(pergunta, resposta, limite)

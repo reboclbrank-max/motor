@@ -94,6 +94,25 @@ ok("a relevância pode ser desligada por ambiente (para não travar nada)",
 ok("a medida fica registrada no log",
    "relevância: resposta cobriu" in _fonte)
 
+print("== 6. o atalho rápido também passa pela medida (defeito medido na conversa #75)")
+_ATALHO = """**Do que está medido** (lido dos arquivos agora, sem passar por modelo):
+
+- Retorno por tipo de post: conteúdo dos jogos média **1.9**, sem retorno em 16 (17.8%)
+- comentário em post alheio: média **0.88**, sem retorno em 87 (41.4%)
+- Bluesky: seguidores 32/50"""
+ok("o atalho que mudou de assunto é RECUSADO", not R.aproveitar_atalho(PERGUNTA, _ATALHO),
+   R.cobre(PERGUNTA, _ATALHO))
+ok("o atalho que responde à pergunta é aceito",
+   R.aproveitar_atalho(PERGUNTA, "A casa tem 12 jogos publicados; o próximo passo do roadmap "
+                                 "é a página de cada jogo."))
+ok("atalho vazio não é aceito", not R.aproveitar_atalho(PERGUNTA, ""))
+ok("o atalho é recusado com a mesma nota que a resposta do motor (sem régua dupla)",
+   R.fora_do_assunto(PERGUNTA, _ATALHO) == (not R.aproveitar_atalho(PERGUNTA, _ATALHO)))
+ok("o responder mede o atalho antes de publicar", "_rel_d.aproveitar_atalho(texto, _direta)" in _fonte)
+ok("o responder deixa o motor responder quando o atalho está fora do assunto",
+   "deixei o motor" in _fonte)
+ok("o atalho recusado fica registrado no log", "relevância: atalho cobriu" in _fonte)
+
 print()
 if FALHAS:
     print("%d de %d verificações da relevância FALHARAM" % (len(FALHAS), len(CERTOS) + len(FALHAS)))

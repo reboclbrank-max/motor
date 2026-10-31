@@ -844,8 +844,23 @@ def principal():
             import dados as _dd
             _direta = _dd.resposta_direta(texto)
             if _direta:
-                responder(numero, _direta, marca)
-                return 0
+                # O atalho é rápido (3 s contra ~2 min do motor), mas rápido não basta: em
+                # 31/10/2026 ele respondeu com um assunto vizinho. Mede antes de publicar.
+                _serve, _nota_d = True, None
+                if os.environ.get("REFORCO_RELEVANCIA", "1") != "0":
+                    try:
+                        import relevancia as _rel_d
+                        _nota_d = _rel_d.cobre(texto, _direta)["nota"]
+                        _serve = _rel_d.aproveitar_atalho(texto, _direta)
+                    except Exception as e:
+                        C.log(f"relevância do atalho não medida ({type(e).__name__}: {str(e)[:80]})")
+                if _serve:
+                    if _nota_d is not None:
+                        C.log(f"relevância: atalho cobriu {_nota_d:.0%} da pergunta — publicando")
+                    responder(numero, _direta, marca)
+                    return 0
+                C.log(f"relevância: atalho cobriu {_nota_d:.0%} da pergunta — deixei o motor "
+                      f"responder em vez de publicar assunto vizinho")
         except Exception as e:
             C.log(f"resposta direta não usada ({str(e)[:80]})")
         # EXATIDÃO SEM MOTOR: conta, data, conversão e porcentagem saem daqui, exatas.
