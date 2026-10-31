@@ -23,7 +23,15 @@ import comum as C
 import responder
 
 MAX_POR_RODADA = int(os.environ.get("MAX_POR_RODADA", "3"))
-JANELA_HORAS = int(os.environ.get("JANELA_HORAS", "72"))
+# JANELA: uma mensagem do dono sem resposta não pode envelhecer em silêncio. Era 72 h com 30
+# conversas por leitura; com 100 por página e uma semana de janela, o que ficou para trás é
+# pego na rodada seguinte em vez de desaparecer.
+JANELA_HORAS = int(os.environ.get("JANELA_HORAS", "168"))
+POR_PAGINA = int(os.environ.get("POR_PAGINA", "100"))
+# Cadeia: quando a rodada responde e SOBRA pendente, o próprio varredor acorda o chat de novo.
+# Sem isso, 15 pendentes com teto de 3 por rodada esperavam o próximo cron (que na prática roda
+# algumas vezes por dia, não a cada 10 min): resposta em horas em vez de minutos.
+MAX_CADEIA = int(os.environ.get("MAX_CADEIA", "8"))
 
 
 def log(*partes):
@@ -40,17 +48,42 @@ def _marca_de(corpo):
     return texto[i + len("<!--resp:"):fim].strip() if fim > i else None
 
 
+def _do_robo(corpo):
+    """A fala é da própria casa (e não do dono), mesmo saindo com o login do dono?
+
+    Medido em 31/10/2026: a automação publica com o MESMO login do dono, então
+    `_do_dono(usuario)` sozinho respondia "sim" para boletins e pilotos automáticos — e a
+    varredura respondia ao robô. Duas provas, nesta ordem:
+      1. a marca invisível (`<!--resp:...-->` nas respostas, `<!--robo:...-->` nas demais
+         falas da casa, posta por `comum.comentar`);
+      2. o cabeçalho da casa (`🤖 **Assistente Rebocl**`, `🤖 **Piloto automático**`, …) para
+         o que foi publicado antes da marca existir — sem apagar histórico.
+    """
+    texto = (corpo or "").lstrip()
+    if "<!--resp:" in texto or C.MARCA_DO_ROBO in texto:
+        return True
+    return texto.startswith("🤖") or texto.startswith(C.ASSINATURA)
+
+
 def _do_dono(usuario):
     return (usuario or {}).get("login") == C.DONO_GITHUB and (usuario or {}).get("type") != "Bot"
 
 
-def pendentes(limite_dias=None):
-    """Lista (issue, comentario|None) cuja última mensagem do dono não foi respondida."""
+def pendentes(limite_dias=None, diagnostico=None):
+    """Lista (issue, comentario|None) cuja última mensagem do DONO não foi respondida.
+
+    `diagnostico` (dict, opcional) recebe os números do que foi descartado e por quê — é o que
+    permite dizer no log "15 pendentes, 12 eram do robô" em vez de fingir uma fila enorme.
+    """
+    if diagnostico is not None:
+        diagnostico.update({"ignoradas_do_robo": 0, "fora_da_janela": 0, "nao_do_dono": 0,
+                            "ja_respondidas": 0})
     # utcnow (naive) para comparar com o updated_at da API, que é naive depois do slice
     desde = datetime.datetime.utcnow() - datetime.timedelta(
         hours=JANELA_HORAS if limite_dias is None else limite_dias)
     try:
-        issues = C.gh("GET", f"/repos/{C.REPO}/issues?state=open&sort=updated&direction=desc&per_page=30") or []
+        issues = C.gh("GET", f"/repos/{C.REPO}/issues?state=open&sort=updated&direction=desc"
+                             f"&per_page={POR_PAGINA}") or []
     except Exception as e:
         log(f"não consegui listar as conversas: {e}")
         return []
@@ -62,6 +95,8 @@ def pendentes(limite_dias=None):
             quando = issue.get("updated_at", "")
             instante = datetime.datetime.fromisoformat(quando.replace("Z", "+00:00")).replace(tzinfo=None)
             if instante < desde:
+                if diagnostico is not None:
+                    diagnostico["fora_da_janela"] += 1
                 continue
         except (ValueError, AttributeError):
             pass
@@ -80,10 +115,20 @@ def pendentes(limite_dias=None):
                 achados.append((issue, None))
             continue
         ultimo = comentarios[-1]
+        # Fala da casa (marca ou cabeçalho) NÃO é pergunta pendente. Desde 31/10/2026 isto vem
+        # antes de qualquer outra regra: era aqui que o robô se respondia.
+        if _do_robo(ultimo.get("body")):
+            if diagnostico is not None:
+                diagnostico["ignoradas_do_robo"] += 1
+            continue
         if not _do_dono(ultimo.get("user")):
-            continue  # a última fala é do robô: já respondida
+            if diagnostico is not None:
+                diagnostico["nao_do_dono"] += 1
+            continue  # a última fala é de outra pessoa: não é pergunta do dono
         marca = f"c{ultimo.get('id')}"
         if marca in respondidas:
+            if diagnostico is not None:
+                diagnostico["ja_respondidas"] += 1
             continue
         achados.append((issue, ultimo))
     return achados
@@ -128,20 +173,48 @@ def processar(issue, comentario):
         return False
 
 
-def main():
+def acordar_de_novo(motivo="fila"):
+    """Pede ao GitHub outra rodada do chat. Devolve True se o pedido saiu.
+
+    A cadeia é o que faz a fila DRENAR: cada rodada responde até MAX_POR_RODADA, então uma fila
+    de 15 com teto 3 levava horas (o cron de 10 min na prática roda poucas vezes por dia). Aqui,
+    terminada a rodada com progresso e ainda com gente esperando, a próxima já entra na fila.
+    TRAVA: só encadeia quando ESTA rodada respondeu alguém. Sem progresso, sem cadeia — foi
+    assim que se evita laço infinito quando um motor está fora do ar.
+    """
+    try:
+        C.gh("POST", f"/repos/{C.REPO_ROBO}/actions/workflows/chat.yml/dispatches", {"ref": "main"})
+        log(f"cadeia: outra rodada pedida ({motivo})")
+        return True
+    except Exception as e:  # noqa: BLE001
+        log(f"cadeia: não consegui pedir outra rodada ({type(e).__name__}: {str(e)[:120]})")
+        return False
+
+
+def main(processar_um=None, disparar=None):
     if not C.GH_TOKEN:
         log("sem token de conversas — nada a fazer")
         return 1
-    lista = pendentes()
+    processar_um = processar_um or processar
+    disparar = disparar or acordar_de_novo
+    diagnostico = {}
+    lista = pendentes(diagnostico=diagnostico)
+    if diagnostico.get("ignoradas_do_robo"):
+        log(f"{diagnostico['ignoradas_do_robo']} conversa(s) só com fala da casa — não é pergunta")
     if not lista:
-        log("nenhuma mensagem pendente")
+        log("nenhuma mensagem pendente do dono")
         return 0
-    log(f"{len(lista)} pendente(s); processando até {MAX_POR_RODADA}")
+    log(f"{len(lista)} pendente(s) do dono; processando até {MAX_POR_RODADA}")
     feitas = 0
     for issue, comentario in lista[:MAX_POR_RODADA]:
-        if processar(issue, comentario):
+        if processar_um(issue, comentario):
             feitas += 1
+    restantes = len(lista) - feitas
     log(f"respondidas {feitas} de {len(lista)}")
+    if restantes > 0 and feitas > 0:
+        disparar(f"faltam {restantes}")
+    elif restantes > 0:
+        log(f"{restantes} seguem na fila: nenhuma resposta saiu nesta rodada, cadeia NÃO pedida")
     return 0
 
 

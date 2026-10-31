@@ -14,6 +14,7 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 
 import comum as C
@@ -90,13 +91,129 @@ def ja_respondida(numero, marca):
     return any(alvo in (c.get("body") or "") for c in comentarios)
 
 
-def responder(numero, texto, marca, extra=""):
-    """Publica sempre — com rodapé e marca invisível de dedupe."""
+def _parar_batida():
+    """Desliga o sinal de vida antes de publicar (o comentário vai virar a resposta)."""
+    global _BATIDA
+    if _BATIDA is not None:
+        _BATIDA.parar()
+        _BATIDA = None
+
+
+def responder(numero, texto, marca, extra="", editar=None):
+    """Publica a resposta — com rodapé e marca invisível de dedupe.
+
+    `editar=<id do comentário>` reescreve o aviso "estou pensando" no lugar de criar outro
+    comentário. Foi o que resolveu a espera cega (31/10/2026): a resposta demora ~2 min, e o
+    dono ficava sem sinal nenhum nesse tempo. Agora existe UMA mensagem que nasce como
+    "pensando" e vira a resposta — sem lixo na conversa.
+    """
+    _parar_batida()
     corpo = f"{C.ASSINATURA}\n\n{texto}"
     if extra:
         corpo += f"\n\n---\n{extra}"
     corpo += f"\n\n{MARCA_ABERTURA}{marca}-->"
+    if editar and C.editar_comentario(editar, corpo):
+        return
     C.comentar(numero, corpo)
+
+
+class BatidaDoPensando:
+    """Sinal de vida: reescreve o aviso enquanto o motor pensa.
+
+    POR QUE EXISTE (31/10/2026): o aviso imediato acabou com a espera muda, mas ele fica
+    congelado por ~2 min — do lado de quem escreveu, um texto parado é igual a travado. A
+    resposta chega inteira (o motor devolve tudo de uma vez, não há token a token a mostrar),
+    então o que dá para publicar a cada quarenta segundos é o que é verdade: **há quanto tempo
+    estou nisto e em que etapa estou**. Cada batida é uma edição do MESMO comentário, nunca um
+    comentário novo.
+
+    Silencioso por desenho: falha de edição não pode derrubar a resposta. `BATIDA_S=0` desliga.
+    """
+
+    TEXTO = ("🧠 **_ainda pensando…_** há {dur} · {etapa}\n\n"
+             "Nada de reenviar: esta mensagem vira a resposta assim que o motor terminar.")
+
+    def __init__(self, numero, comentario_id, etapa="lendo o que a casa já sabe",
+                 intervalo=None, editor=None, agora=None, dormir=None):
+        self.numero = numero
+        self.comentario_id = comentario_id
+        self.etapa = etapa
+        self.intervalo = intervalo
+        self._editor = editor
+        self._agora = agora or time.time
+        self._dormir = dormir or time.sleep
+        self._inicio = self._agora()
+        self._parar = threading.Event()
+        self._thread = None
+
+    # -- texto -------------------------------------------------------------
+    def duracao(self):
+        segundos = max(0, int(self._agora() - self._inicio))
+        if segundos < 60:
+            return f"{segundos} s"
+        minutos = segundos // 60
+        if minutos < 60:
+            return f"{minutos} min {segundos % 60} s"
+        return f"{minutos // 60} h {minutos % 60} min"
+
+    def texto(self):
+        return self.TEXTO.format(dur=self.duracao(), etapa=self.etapa)
+
+    # -- ciclo -------------------------------------------------------------
+    def _editar(self):
+        try:
+            if self._editor is not None:
+                return self._editor(self.comentario_id, self.texto())
+            return C.editar_comentario(self.comentario_id, self.texto(), autor="pensando")
+        except Exception as e:  # noqa: BLE001
+            C.log(f"batida do pensando: não editei ({type(e).__name__}: {str(e)[:80]})")
+            return False
+
+    def _ciclo(self):
+        while not self._parar.wait(self.intervalo):
+            self._editar()
+
+    def comecar(self):
+        if not self.comentario_id:
+            return self
+        if self.intervalo is None:
+            try:
+                self.intervalo = float(os.environ.get("BATIDA_S", "45"))
+            except ValueError:
+                self.intervalo = 45.0
+        if self.intervalo <= 0:
+            return self
+        self._thread = threading.Thread(target=self._ciclo, name="batida-pensando", daemon=True)
+        self._thread.start()
+        C.log(f"aviso: sinal de vida a cada {self.intervalo:g} s enquanto o motor pensa")
+        return self
+
+    def parar(self):
+        self._parar.set()
+        return self
+
+
+_BATIDA = None
+
+
+def aviso_de_pensamento(numero):
+    """Publica o aviso imediato e devolve o id (None se não deu).
+
+    POR QUE EXISTE: medido em 31/10/2026, o caminho completo leva ~2 min (dispatch → motor →
+    resposta). Do lado de quem escreveu, esse tempo é indistinguível de "não enviou". Este
+    aviso aparece em segundos e é reescrito com a resposta no final.
+    """
+    try:
+        texto_id = (f"🧠 **_pensando…_** o dono escreveu e eu já estou nisto.\n\n"
+                    f"Nada de reenviar: esta mensagem vira a resposta assim que o motor terminar.")
+        global _BATIDA
+        _id = C.comentario_com_id(numero, texto_id, autor="pensando")
+        _parar_batida()
+        _BATIDA = BatidaDoPensando(numero, _id).comecar() if _id else None
+        return _id
+    except Exception as e:  # noqa: BLE001
+        C.log(f"aviso de pensamento: não publiquei ({e})")
+        return None
 
 
 def ajuda():
@@ -222,7 +339,10 @@ def pensar_bem_com_ferramentas(resposta, numero, motor_nome):
 def cacar_cmd():
     """Dispara a caça de motores AGORA — o GitHub sorteia um IP novo."""
     try:
-        C.gh("POST", f"/repos/{C.REPO}/actions/workflows/caca-motores.yml/dispatches", {"ref": "main"})
+        # O workflow mora no repositório do CÓDIGO (público). Mirar no repositório das
+        # conversas devolvia 404 e o comando "caçar" nunca caçava (medido em 31/10/2026).
+        C.gh("POST", f"/repos/{C.REPO_ROBO}/actions/workflows/caca-motores.yml/dispatches",
+             {"ref": "main"})
         return ("🏹 **Caçada disparada!** O GitHub sorteia um IP novo e sonda todos os motores "
                 "(~4 min). Depois digite `janelas:` pra ver o que o IP novo trouxe.")
     except Exception as e:
@@ -551,6 +671,35 @@ def drenar_fila_respostas():
         C.fila_respostas_salvar(restantes)
 
 
+def atalho_serve(pergunta, resposta, rotulo):
+    """O atalho responde à pergunta? — medido antes de publicar, nunca levanta.
+
+    DEFEITO MEDIDO (31/10/2026, conversa #75): a pergunta foi "quantos jogos a casa tem
+    publicados e qual é o próximo passo do roadmap?". Dois atalhos saíram na frente do motor,
+    porque casam com uma palavra da frase:
+      * `casa.pede_decisao` casa em "próximo passo"  → devolveu o relatório de retorno por post;
+      * `dados.resposta_direta` casa em "quantos/publicados" → devolveu números de outro assunto.
+    Nos dois casos: verdadeiro, rápido e fora da pergunta. Atalho que erra o assunto é pior que
+    espera, então todo atalho passa por aqui; se não cobrir a pergunta, o motor responde.
+    """
+    if not (resposta or "").strip():
+        return False
+    if os.environ.get("REFORCO_RELEVANCIA", "1") == "0":
+        return True
+    try:
+        import relevancia as _rel_a
+        nota = _rel_a.cobre(pergunta, resposta)["nota"]
+        if _rel_a.aproveitar_atalho(pergunta, resposta):
+            C.log(f"relevância: atalho '{rotulo}' cobriu {nota:.0%} da pergunta — publicando")
+            return True
+        C.log(f"relevância: atalho '{rotulo}' cobriu {nota:.0%} da pergunta — deixei o motor "
+              f"responder em vez de publicar assunto vizinho")
+        return False
+    except Exception as e:  # noqa: BLE001
+        C.log(f"relevância do atalho '{rotulo}' não medida ({type(e).__name__}: {str(e)[:80]})")
+        return True
+
+
 def principal():
     t_inicio = time.time()
 
@@ -622,7 +771,7 @@ def principal():
                 _placar_txt = C.ler_de("site", "posts/placar-metas.md", "")
                 _des_txt = C.ler_de("site", "posts/desempenho.md", "")
                 _analise = _casa.analise(_placar_txt, _des_txt)
-                if _analise:
+                if _analise and atalho_serve(texto, _analise, "análise da casa"):
                     responder(numero, _analise, marca)
                     return 0
         except Exception as e:
@@ -786,6 +935,10 @@ def principal():
             cache = C.cache_exato(texto)
         except Exception:
             cache = None
+        # O cache também é atalho: se o que está guardado não responde à pergunta (foi resposta
+        # errada de um dia ruim), ele não é reutilizado — o motor responde e sobrescreve a entrada.
+        if cache and not atalho_serve(texto, cache, "cache exato"):
+            cache = None
         if cache:
             responder(numero, cache + "\n\n---\n\n_(🗄 do meu cache — você já fez essa pergunta)_", marca)
             C.registrar_diario(f"- **{C.agora().strftime('%d/%m %H:%M')}** — dono: "
@@ -817,8 +970,11 @@ def principal():
             import dados as _dd
             _direta = _dd.resposta_direta(texto)
             if _direta:
-                responder(numero, _direta, marca)
-                return 0
+                # O atalho é rápido (3 s contra ~2 min do motor), mas rápido não basta: em
+                # 31/10/2026 ele respondeu com um assunto vizinho. Mede antes de publicar.
+                if atalho_serve(texto, _direta, "consulta de número"):
+                    responder(numero, _direta, marca)
+                    return 0
         except Exception as e:
             C.log(f"resposta direta não usada ({str(e)[:80]})")
         # EXATIDÃO SEM MOTOR: conta, data, conversão e porcentagem saem daqui, exatas.
@@ -855,6 +1011,13 @@ def principal():
                 pass
         elif C._pergunta_complexa(texto):
             pergunta_pensar = texto_com_dados
+        # AVISO IMEDIATO: daqui para baixo a resposta passa por modelo e demora ~2 min.
+        # Antes daqui, os atalhos (exatidão, comandos, memória) respondem em segundos e não
+        # precisam de aviso.
+        aviso_pensando = aviso_de_pensamento(numero)
+        if _BATIDA is not None:
+            _BATIDA.etapa = "o motor está escrevendo"
+
         resposta, motor_nome, usos, erro = None, None, None, None
         resposta_falha = False
         if pergunta_pensar:
@@ -964,6 +1127,41 @@ def principal():
             except Exception as e:
                 C.log(f"confiança não usada ({str(e)[:80]})")
 
+        # ---------------------------------------------------------------- resposta x pergunta
+        # DEFEITO MEDIDO (31/10/2026): perguntei "quantos jogos a casa tem publicados e qual o
+        # próximo passo do roadmap?" e voltou um relatório de retorno por tipo de post — números
+        # verdadeiros, assunto errado, e nada no caminho percebeu. Aqui a cobertura é medida
+        # (relevancia.cobre) e, quando a resposta mudou de assunto, o motor tem UMA segunda
+        # chance com a pergunta explícita; fica a candidata que cobre mais.
+        if resposta and os.environ.get("REFORCO_RELEVANCIA", "1") != "0":
+            try:
+                import relevancia as _rel
+                _nota = _rel.cobre(texto, resposta)["nota"]
+                if _rel.fora_do_assunto(texto, resposta):
+                    C.log(f"relevância: resposta cobriu {_nota:.0%} da pergunta — pedindo de novo")
+                    if _BATIDA is not None:
+                        _BATIDA.etapa = "conferindo se a resposta responde à pergunta"
+                    _historico2 = C.historico_da_conversa(numero) + [
+                        {"role": "user", "content": texto + "\n\n" + _rel.reforco(texto)}]
+                    _outra, _motor2, _usos2, _erro2 = C.responder_com_ferramentas(
+                        _historico2, numero, preferir=motor_nome)
+                    if _outra:
+                        _escolhida, _rotulo, _aval = _rel.melhor(
+                            texto, [(resposta, "primeira"), (_outra, "reforçada")])
+                        if _escolhida == _outra:
+                            C.log(f"relevância: adotei a resposta reforçada "
+                                  f"({_nota:.0%} → {_aval['nota']:.0%})")
+                            resposta = _outra
+                            motor_nome = _motor2 or motor_nome
+                            usos = (usos or []) + ["segunda tentativa por relevância"]
+                        else:
+                            C.log(f"relevância: mantive a primeira "
+                                  f"({_nota:.0%} vs {_aval['nota']:.0%})")
+                else:
+                    C.log(f"relevância: resposta cobriu {_nota:.0%} da pergunta")
+            except Exception as e:  # noqa: BLE001
+                C.log(f"relevância: não apliquei ({type(e).__name__}: {str(e)[:90]})")
+
         if resposta:
             resposta, usos_extras = executar_comandos_soltos(resposta)
             if usos_extras:
@@ -981,7 +1179,7 @@ def principal():
             if usos:
                 rodape += " · usei: " + "; ".join(usos)
             rodape += ")_"
-            responder(numero, resposta, marca, extra=rodape)
+            responder(numero, resposta, marca, extra=rodape, editar=aviso_pensando)
             registrar_tempo()
             C.registrar_conversa(numero, texto, resposta, motor_nome or "modo direto")
             try:
@@ -1008,7 +1206,7 @@ def principal():
                           "🗄 **Cérebro de reserva (100% meu, sem motores):** os motores online estão fora do ar "
                           "agora, mas achei no meu próprio histórico uma resposta parecida com a sua pergunta:\n\n"
                           "---\n\n" + reserva + "\n\n---",
-                          marca,
+                          marca, editar=aviso_pensando,
                           extra="Quando os motores voltarem eu respondo melhor. Essa resposta veio do meu arquivo de memória.")
                 C.registrar_diario(f"- **{C.agora().strftime('%d/%m %H:%M')}** — dono: "
                                    f"{texto[:MAX_RESUMO].replace(chr(10), ' ')} → RESERVA (motores fora do ar)")
@@ -1026,7 +1224,7 @@ def principal():
                       "`noticias:`, `hora:`, `imagem:`, `verificar:`, `memoria:`, `anotar:`, `lembrar:`, "
                       "`avise quando:`, `lembrete:`, `/status`.\n\n"
                       f"_Detalhe técnico: `{str(erro)[:200]}`_",
-                      marca,
+                      marca, editar=aviso_pensando,
                       extra="Mensagem na fila de respostas — o vigia e a próxima mensagem drenam a fila sozinhos.")
             C.registrar_diario(f"- **{C.agora().strftime('%d/%m %H:%M')}** — dono: "
                                f"{texto[:MAX_RESUMO].replace(chr(10), ' ')} → FALHA de motores")
