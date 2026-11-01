@@ -79,6 +79,7 @@ jobs:
         run: |
           python3 teste-casa.py
           python3 teste-entrega-verificada.py
+          python3 teste-memoria-persistente.py
 
       - name: Baixar a memória do repositório privado
         env:
