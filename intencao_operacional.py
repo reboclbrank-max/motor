@@ -18,7 +18,10 @@ def classificar(pedido):
  leitura=bool(re.match(r'^(confira|conferir|verifique|verificar|audite|auditar|diagnostique|diagnosticar|inspecione|inspecionar|consulte|consultar|cheque|veja|mostre|compare|analise|analisar|leia)\b',s) or re.match(r'^como esta(?:o)? (?:o |a |os |as )?(chat|site|motor|operacao)\b',s))
  if not leitura:return None
  if re.search(r'https?://(?!github\.com/reboclbrank-max/)',s):return None
- alvos={a for a in ['chat','site','motor'] if re.search(r'\b'+a+r'\b',s)}
+ # Restrições negativas não escolhem alvos/fontes. Mutação ainda é checada no pedido inteiro.
+ texto_fontes=re.sub(r'\b(?:nao|não|sem)\b[^,;.\n]*','',texto,flags=re.I)
+ evidencias=normalizar(texto_fontes)
+ alvos={a for a in ['chat','site','motor'] if re.search(r'\b'+a+r'\b',evidencias)}
  contexto=bool(re.search(r'\b(operacao|executor|workflow|workflows|barreira|barreiras|dependencias|preparacao|repositorio|casa|status|saude|funcionamento)\b',s) or re.search(r'\b(?:motor|site|chat)/[A-Za-z0-9_./-]+',texto))
  if not alvos and 'operacao' not in s:return None
  if alvos=={'motor'} and not contexto:return None
@@ -29,12 +32,13 @@ def classificar(pedido):
  if re.search(r'\b(?:'+VERBOS+r')\b',sem_negacoes) or re.search(r'\bfaca (deploy|publicacao|envio|alteracao|implantacao|compra)\b',sem_negacoes):
   return {'modo':'bloqueado','motivo':'pedido_misto_leitura_e_alteracao_requer_revisao'}
  fontes=[]
- for caminho in re.findall(r'\b(?:motor|site|chat)/[A-Za-z0-9_./-]+',texto):fontes.append(['REPO',caminho.rstrip('.')])
+ for caminho in re.findall(r'\b(?:motor|site|chat)/[A-Za-z0-9_./-]+',texto_fontes):fontes.append(['REPO',caminho.rstrip('.')])
  if not fontes:
-  preparacao=any(p in s for p in ['barreira','dependencia','preparacao','workflow'])
+  preparacao=any(p in evidencias for p in ['barreira','dependencia','preparacao','workflow'])
+  status=bool(re.search(r'\b(execucao|execucoes|runs|jobs|status)\b',evidencias))
   if 'site' in alvos:fontes.append(['REPO','site/.github/workflows/postagem-diaria.yml'])
   if 'chat' in alvos and preparacao:fontes.append(['REPO','motor/.github/workflows/chat.yml'])
-  if ('chat' in alvos and not preparacao) or (not alvos and 'operacao' in s):fontes.append(['ACOES','chat'])
+  if ('chat' in alvos and (not preparacao or status)) or (not alvos and 'operacao' in s):fontes.append(['ACOES','chat'])
   if alvos=={'motor'}:fontes.append(['ACOES',''])
  unicas=[]
  for f in fontes:
