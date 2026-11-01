@@ -90,8 +90,23 @@ def _do_dono(usuario):
     return (usuario or {}).get("login") == C.DONO_GITHUB and (usuario or {}).get("type") != "Bot"
 
 
+def revisao_historica():
+    """Pendências anteriores à migração: revisão, nunca marcar como respondidas."""
+    caminho = "MEMORIA/fila-revisao-historica.json"
+    if not os.path.isfile(caminho):
+        if os.environ.get("FILA_EXIGE_REVISAO_HISTORICA") == "1":
+            raise RuntimeError("registro_de_revisao_historica_ausente")
+        return set()
+    with open(caminho, encoding="utf-8") as f:
+        dados = json.load(f)
+    if not isinstance(dados, dict) or not isinstance(dados.get("mensagens"), list):
+        raise RuntimeError("registro_de_revisao_historica_invalido")
+    return {(m["issue"], m["marca"]) for m in dados["mensagens"]
+            if m.get("estado") == "revisao_historica"}
+
+
 def pendentes(limite_dias=None, diagnostico=None):
-    """Lista (issue, comentario|None) cuja última mensagem do DONO não foi respondida.
+    """Lista mensagens individuais do DONO sem entrega confirmada.
 
     `diagnostico` (dict, opcional) recebe os números do que foi descartado e por quê — é o que
     permite dizer no log "15 pendentes, 12 eram do robô" em vez de fingir uma fila enorme.
@@ -113,6 +128,7 @@ def pendentes(limite_dias=None, diagnostico=None):
             break
         pagina += 1
     achados = []
+    revisao = revisao_historica()
     for issue in issues:
         if issue.get("pull_request"):
             continue
@@ -133,29 +149,34 @@ def pendentes(limite_dias=None, diagnostico=None):
         except Exception as e:
             log(f"conversa #{numero}: comentários ilegíveis ({type(e).__name__})")
             raise RuntimeError("comentarios_nao_observaveis") from e
-        respondidas = {_marca_de(c.get("body")) for c in comentarios}
-        # conversa sem comentário: a própria issue é a mensagem (marca a{numero})
-        if not comentarios:
-            if f"a{numero}" not in respondidas:
-                achados.append((issue, None))
-            continue
-        ultimo = comentarios[-1]
-        # Fala da casa (marca ou cabeçalho) NÃO é pergunta pendente. Desde 31/10/2026 isto vem
-        # antes de qualquer outra regra: era aqui que o robô se respondia.
-        if _do_robo(ultimo.get("body")):
-            if diagnostico is not None:
-                diagnostico["ignoradas_do_robo"] += 1
-            continue
-        if not _do_dono(ultimo.get("user")):
-            if diagnostico is not None:
-                diagnostico["nao_do_dono"] += 1
-            continue  # a última fala é de outra pessoa: não é pergunta do dono
-        marca = f"c{ultimo.get('id')}"
-        if marca in respondidas:
-            if diagnostico is not None:
-                diagnostico["ja_respondidas"] += 1
-            continue
-        achados.append((issue, ultimo))
+        respondidas = {_marca_de(c.get("body")) for c in comentarios
+                       if (c.get("user") or {}).get("login") in (C.DONO_GITHUB, "github-actions[bot]")
+                       and (c.get("body") or "").startswith(C.ASSINATURA)}
+        mensagens = [(f"a{numero}", issue, None)] + [
+            (f"c{c.get('id')}", c, c) for c in comentarios]
+        for marca, mensagem, comentario in mensagens:
+            if not _do_dono(mensagem.get("user")):
+                if diagnostico is not None:
+                    diagnostico["nao_do_dono"] += 1
+                continue
+            if _do_robo(mensagem.get("body")):
+                if diagnostico is not None:
+                    diagnostico["ignoradas_do_robo"] += 1
+                continue
+            if comentario is None and comentarios and not (mensagem.get("body") or "").strip():
+                continue  # abertura vazia não acrescenta pedido ao histórico já existente
+            if marca in respondidas:
+                if diagnostico is not None:
+                    diagnostico["ja_respondidas"] += 1
+                continue
+            if (numero, marca) in revisao:
+                if diagnostico is not None:
+                    diagnostico["revisao_historica"] = diagnostico.get("revisao_historica", 0) + 1
+                continue  # não executar ordens antigas, nem fingir que foram atendidas
+            achados.append((issue, comentario))
+    achados.sort(key=lambda par: ((par[1] or par[0]).get("created_at") or "",
+                                  par[0].get("number", 0),
+                                  (par[1] or {}).get("id", 0)))
     return achados
 
 
@@ -256,8 +277,10 @@ def main(processar_um=None, disparar=None):
         return 2
     if diagnostico.get("ignoradas_do_robo"):
         log(f"{diagnostico['ignoradas_do_robo']} conversa(s) só com fala da casa — não é pergunta")
+    if diagnostico.get("revisao_historica"):
+        log(f"{diagnostico['revisao_historica']} mensagem(ns) antiga(s) aguardam revisão, não execução")
     if not lista:
-        log("nenhuma mensagem pendente do dono")
+        log("nenhuma mensagem executável pendente do dono")
         return 0
     limite = MAX_POR_RODADA if MAX_POR_RODADA > 0 else len(lista)
     lote = lista[:limite]
