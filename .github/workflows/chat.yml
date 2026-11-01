@@ -89,6 +89,7 @@ jobs:
           python3 teste-sincronizacao-versao.py
           python3 teste-contexto-pedido.py
           python3 teste-ensaio-isolado.py
+          python3 teste-pedido-atual.py
 
       - name: Baixar a memória do repositório privado
         env:

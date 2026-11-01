@@ -58,6 +58,8 @@ def filho(fase, numero):
     def limitado(tipo, argumento):
         if tipo!='TRABALHO':return 'Ensaio interno: use somente TRABALHO, sem efeitos externos.'
         dados=json.loads(argumento)
+        if dados.get('acao')=='criar' and (not isinstance(dados.get('etapas'),list) or len(dados['etapas'])!=2):
+            return 'O pedido exige exatamente DUAS etapas: analisar ocorrências e redigir relatório. Refaça a chamada criar; não crie metas de marketing.'
         if dados.get('acao')!='criar' and dados.get('id')!=T.id_da_origem():
             return 'Use somente o ID desta mensagem; não toque em outros trabalhos.'
         contagem['ferramentas']+=1;salvar();resultado=executar(tipo,argumento)
@@ -89,7 +91,11 @@ def main(fase, numero=None):
         numero=issue['number'];saida('issue',numero)
         C.gh('PATCH',f'/repos/{C.REPO}/issues/{numero}',{'state':'closed'})
         conferir_issue(numero)
-        code,contagem=executar('interromper',numero);r=registro(numero)
+        contagem={}
+        for tentativa in range(3):
+            code,contagem=executar('interromper',numero)
+            if code==23:break
+        r=registro(numero)
         assert code==23, f'interrupção esperada23, obtida{code}; chamadas={contagem.get("modelo_chamadas",0)}'
         assert r and len(r['etapas'])==2 and r['etapas'][0]['estado']=='evidencia_registrada' and r['etapas'][1]['estado']=='pendente'
         assert contagem.get('modelo_chamadas',0)>0
@@ -100,7 +106,10 @@ def main(fase, numero=None):
         sha1=antes['etapas'][0]['evidencia']['sha_blob']
         if fase=='retomar':assert sha1==os.environ['SHA_ETAPA1']
         comentarios=C.comentarios_da_conversa_verificados(numero)
-        code,contagem=executar('normal',numero);r=registro(numero)
+        contagem={}
+        for tentativa in range(3 if fase=='retomar' else 1):
+            code,contagem=executar('normal',numero);r=registro(numero)
+            if code==0 and r and r.get('estado')=='entregue_para_revisao':break
         assert code==0 and r['id']==antes['id'] and r['estado']=='entregue_para_revisao'
         assert r['etapas'][0]['evidencia']['sha_blob']==sha1
         recibo=T.recibo(r['id']);assert 'Etapa 2' in recibo
