@@ -258,8 +258,18 @@ bloco_laco = re.search(r"for t in ([^;]+?); do", testes, re.MULTILINE)
 checar("pacote crítico usa um único bloco YAML run", bloco_laco is not None)
 if bloco_laco:
     lista = bloco_laco.group(1)
-    for arquivo in ("teste-cerebro.py", "teste-caca.py", "teste-chat.py"):
+    for arquivo in ("teste-cerebro.py", "teste-caca.py", "teste-sincronizacao-versao.py", "teste-contexto-pedido.py"):
         checar("pacote crítico executa " + arquivo, lista.count(arquivo) == 1)
+
+
+checar("integração pública fica fora do laço offline",
+       bloco_laco is not None and "teste-chat.py" not in bloco_laco.group(1)
+       and "Integração pública somente-leitura (requer rede)" in testes
+       and testes.count("python3 teste-chat.py") == 1)
+checar("suíte não publica memória sintética nem recebe PAT",
+       "sincronizar.py subir" not in testes and "secrets.PAT_MEMORIA" not in testes)
+for arquivo in ("teste-sincronizacao-versao.py", "teste-contexto-pedido.py"):
+    checar("worker protege o contrato " + arquivo, "python3 " + arquivo in worker)
 
 checar(
     "contrato offline entra na barreira",

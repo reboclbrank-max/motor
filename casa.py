@@ -17,6 +17,8 @@ REGRAS (não regredir):
 import json
 import os
 import re
+from contextvars import ContextVar
+from contextlib import contextmanager
 
 REPO_SITE = "site"
 ARQ_DESEMPENHO = "posts/desempenho.md"
@@ -344,7 +346,7 @@ def ler_cache(caminho=None):
 
 
 # ------------------------------------------------------------------- ações
-_PEDIDO_ATUAL = ""
+_PEDIDO_ATUAL = ContextVar("pedido_da_casa", default="")
 
 RE_PEDE_PUBLICAR = re.compile(
     r"\b(publica|publicar|publica[çc][ãa]o|posta|postar|poste|dispara o ciclo|roda o ciclo)\b",
@@ -354,14 +356,24 @@ RE_NEGA_PUBLICAR = re.compile(r"\b(n[ãa]o\s+(publica|posta|publique|poste)|sem\
 
 def definir_pedido(texto):
     """Guarda a mensagem do dono desta rodada — a ação é autorizada por ela, não pelo motor."""
-    global _PEDIDO_ATUAL
-    _PEDIDO_ATUAL = texto or ""
-    return _PEDIDO_ATUAL
+    _PEDIDO_ATUAL.set(texto or "")
+    return _PEDIDO_ATUAL.get()
+
+
+
+@contextmanager
+def contexto_pedido(texto):
+    """Pedido isolado e restaurado ao sair, inclusive na fila/retomada e em erro."""
+    token = _PEDIDO_ATUAL.set(texto or "")
+    try:
+        yield
+    finally:
+        _PEDIDO_ATUAL.reset(token)
 
 
 def pedido_explicito(texto=None):
     """Verdadeiro só quando o DONO pediu publicação/postagem nesta mensagem."""
-    texto = _PEDIDO_ATUAL if texto is None else texto
+    texto = _PEDIDO_ATUAL.get() if texto is None else texto
     if not texto or RE_NEGA_PUBLICAR.search(texto):
         return False
     return bool(RE_PEDE_PUBLICAR.search(texto))
