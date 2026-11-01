@@ -91,7 +91,7 @@ def ja_respondida(numero, marca):
     import casa,operacao_leitura as O
     return any(
         C.comentario_e_resposta_final(c) and alvo in (c.get("body") or "")
-        and (not casa.escopo_leitura_operacional() or O.marcador(marca) in (c.get("body") or ""))
+        and (not casa.exigir_recibo_operacional() or O.marcador(marca) in (c.get("body") or ""))
         for c in comentarios)
 
 
@@ -778,7 +778,7 @@ def responder_operacao_leitura(numero,texto,marca):
     import operacao_leitura as O
     try:
         import planejamento_operacional as P
-        recibo=P.executar(texto) if texto.lstrip().startswith(P.PREFIXO) else O.executar(texto)
+        recibo=O.executar(texto) if texto.lstrip().startswith(O.PREFIXO) else P.executar(texto)
         resposta="Conferência operacional concluída com fontes reais. Uma resposta anterior sem este recibo não comprovava a entrega.\n\n"+recibo+"\n\n"+O.marcador(marca)
         if not ja_respondida(numero,marca):responder(numero,resposta,marca)
         if not ja_respondida(numero,marca):raise RuntimeError('entrega nao confirmada')
@@ -787,8 +787,9 @@ def responder_operacao_leitura(numero,texto,marca):
         return 0
     except Exception as e:
         C.log('leitura operacional: bloqueio verificavel ('+type(e).__name__+')')
+        motivo='Pedido mistura leitura e alteração: nenhuma alteração foi executada; é necessária revisão do plano de ação.' if str(e)=='pedido_misto_leitura_e_alteracao_requer_revisao' else 'A leitura ou o plano não pôde ser confirmado; a origem permanece pendente para revisão.'
         garantir_pendencia(numero,texto,marca)
-        responder(numero,'Ainda não concluí esta leitura operacional. A origem e os checkpoints foram preservados; não há recibo novo confirmado. Nenhuma ação externa é autorizada por esta falha.',marca,pendente=True)
+        responder(numero,motivo+' A origem e os checkpoints foram preservados; não há recibo novo confirmado. Nenhuma ação externa é autorizada por esta falha.',marca,pendente=True)
         return 1
 
 

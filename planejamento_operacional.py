@@ -7,6 +7,9 @@ import trabalhos as T
 import operacao_leitura as O
 PREFIXO='<!--escopo:planejamento-operacional-->'
 class Bloqueio(ValueError):pass
+def eh_planejamento(pedido):
+ import intencao_operacional as I
+ return (I.classificar(pedido) or {}).get("modo") in ("automatico","planejamento_explicito")
 
 def validar_fontes(fontes):
  if not isinstance(fontes,list) or not 1<=len(fontes)<=6:raise Bloqueio('quantidade_de_fontes_invalida')
@@ -34,7 +37,9 @@ def validar_proposta(texto,digest):
  return validar_fontes(d['fontes'])
 
 def obter_plano(pedido):
- if not pedido.lstrip().startswith(PREFIXO) or not T.id_da_origem():raise Bloqueio('origem_ou_escopo_ausente')
+ import intencao_operacional as I
+ intencao=I.classificar(pedido)
+ if not intencao or intencao['modo']=='leitura_explicita' or not T.id_da_origem():raise Bloqueio('origem_ou_escopo_ausente')
  digest=hashlib.sha256(pedido.encode()).hexdigest();ident=T.id_da_origem();path=f'MEMORIA/planos-operacionais/{ident}.json'
  existente=O.ler_opcional(path)
  if existente:
@@ -42,8 +47,19 @@ def obter_plano(pedido):
   if O.sha(raw)!=existente['sha']:raise Bloqueio('plano_sem_integridade')
   registro=json.loads(raw)
   if registro.get('versao')!=1 or registro.get('pedido_sha256')!=digest or registro.get('origem')!=T._ORIGEM.get():raise Bloqueio('plano_de_outra_origem_ou_pedido')
-  if registro.get('estado')!='validado':raise Bloqueio('plano_bloqueado_persistido_requer_revisao')
+  if registro.get('estado')!='validado':
+   if registro.get('motivo_bloqueio')=='pedido_misto_leitura_e_alteracao_requer_revisao':raise Bloqueio(registro['motivo_bloqueio'])
+   raise Bloqueio('plano_bloqueado_persistido_requer_revisao')
   registro['fontes']=validar_fontes(registro.get('fontes'));return registro
+ if intencao['modo']=='bloqueado':
+  registro={'versao':1,'origem':T._ORIGEM.get(),'pedido_sha256':digest,'estado':'bloqueado','fontes':[],'tentativas_modelo':0,'modelo':None,'motivo_bloqueio':intencao['motivo']}
+  O.imutavel(path,json.dumps(registro,ensure_ascii=False,sort_keys=True)+'\n')
+  raise Bloqueio(intencao['motivo'])
+ if intencao['modo']=='automatico':
+  fontes=validar_fontes(intencao['fontes_minimas'])
+  registro={'versao':1,'origem':T._ORIGEM.get(),'pedido_sha256':digest,'estado':'validado','fontes':fontes,'tentativas_modelo':0,'modelo':None,'metodo':intencao['metodo'],'versao_roteador':1,'motivo_bloqueio':None}
+  O.imutavel(path,json.dumps(registro,ensure_ascii=False,sort_keys=True)+'\n')
+  return registro
  sistema=('Você propõe um plano de LEITURA, não executa nada. Responda somente JSON com chaves versao=1, pedido_sha256 (copie exatamente o hash informado), fontes (lista de pares [tipo,argumento]). '
  'Tipos: REPO com argumento motor/caminho, site/caminho ou chat/caminho (apenas repositórios públicos); ACOES com filtro de nome, por exemplo chat. Máximo seis fontes. '
  'Não inclua comandos, ferramentas de escrita, textos de relatório, estado de sucesso, credenciais ou chaves extras. Escolha fontes necessárias ao objetivo atual; não use tarefas de histórico. '

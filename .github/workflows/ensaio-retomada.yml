@@ -21,8 +21,8 @@ jobs:
           python-version: "3.12"
       - name: Contratos offline
         run: |
-          python3 teste-contexto-pedido.py
-          python3 teste-retomada-origem.py
+          python3 rodar-contratos-offline.py teste-contexto-pedido.py
+          python3 rodar-contratos-offline.py teste-retomada-origem.py
       - id: fase
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_MEMORIA }}
@@ -43,8 +43,8 @@ jobs:
           python-version: "3.12"
       - name: Contratos offline
         run: |
-          python3 teste-contexto-pedido.py
-          python3 teste-retomada-origem.py
+          python3 rodar-contratos-offline.py teste-contexto-pedido.py
+          python3 rodar-contratos-offline.py teste-retomada-origem.py
       - id: fase
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_MEMORIA }}
@@ -67,8 +67,8 @@ jobs:
           python-version: "3.12"
       - name: Contratos offline
         run: |
-          python3 teste-contexto-pedido.py
-          python3 teste-retomada-origem.py
+          python3 rodar-contratos-offline.py teste-contexto-pedido.py
+          python3 rodar-contratos-offline.py teste-retomada-origem.py
       - id: fase
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_MEMORIA }}

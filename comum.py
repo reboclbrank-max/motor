@@ -2929,17 +2929,24 @@ def _ferramenta_plantar(argo):
         return "Uso: [[PLANTAR: https://base/v1 | modelo]] (teste antes com [[TESTAR:]])"
     base, modelo = partes[0].strip().rstrip("/"), partes[1].strip()
     try:
+        url=urllib.parse.urlsplit(base)
+        if url.query or url.fragment or not modelo or any(ord(c)<32 for c in modelo):
+            return "Candidato inválido; não alterei o cadastro."
+        _validar_url_publica(base)
+    except ValueError:
+        return "Endpoint não público ou inválido; não alterei o cadastro."
+    try:
         cand = json.loads(ler_remoto("MEMORIA/motores-candidatos.json", "[]") or "[]")
     except Exception:
-        cand = []
-    if not isinstance(cand, list):
-        cand = []
-    if any(c.get("base") == base and c.get("modelo") == modelo for c in cand):
+        return "Cadastro ilegível; não apaguei nem substituí os dados existentes."
+    if not isinstance(cand,list):
+        return "Cadastro com formato inválido; não modifiquei os dados existentes."
+    if any(isinstance(c,dict) and c.get("base")==base and c.get("modelo")==modelo for c in cand):
         return "Já está na fila de candidatos."
-    item = {"base": base, "modelo": modelo, "por": "assistente", "em": agora().strftime("%Y-%m-%d")}
+    item={"nome":(url.hostname+" / "+modelo)[:200],"base":base,"modelo":modelo,"tipo":"openai","timeout":45,"por":"assistente","em":agora().strftime("%Y-%m-%d")}
     cand.append(item)
-    escrever_remoto("MEMORIA/motores-candidatos.json", json.dumps(cand, indent=1),
-                    f"assistente: plantou candidato {modelo}")
+    ok=escrever_remoto("MEMORIA/motores-candidatos.json",json.dumps(cand,ensure_ascii=False,indent=1),"assistente: cadastra candidato completo")
+    if not ok:return "Cadastro não confirmado; não declaro candidato plantado."
     return f"Plantado: {modelo} — o caçador diário vai verificar e promover se estiver vivo."
 
 
@@ -3104,6 +3111,9 @@ def executar_ferramenta(tipo, argumento):
     tipo = tipo.upper()
     argumento = argumento.strip().strip('"“”\'')
     _autorizar_leitura_operacional(tipo,argumento)
+    import casa,autorizacao_efeitos as A
+    if not A.permitido(tipo,argumento,casa.pedido_atual(),casa.pedido_explicito()):
+        return "⛔ Ação exige pedido explícito do dono nesta mensagem; nenhum efeito foi executado."
     if tipo == "TRABALHO":
         import trabalhos
         return trabalhos.executar(argumento)

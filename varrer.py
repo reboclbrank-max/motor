@@ -167,7 +167,7 @@ def pendentes(limite_dias=None, diagnostico=None):
             if comentario is None and comentarios and not (mensagem.get("body") or "").strip():
                 continue  # abertura vazia não acrescenta pedido ao histórico já existente
             import operacao_leitura as O
-            if marca in respondidas and (numero,marca) not in revisao and O.eh_operacional(mensagem.get("body")):
+            if marca in respondidas and (numero,marca) not in revisao and O.exige_comprovante(mensagem.get("body")):
                 if not any(C.comentario_e_resposta_final(c) and O.marcador(marca) in (c.get("body") or "") and ("<!--resp:"+marca+"-->") in (c.get("body") or "") for c in comentarios):
                     achados.append((issue,comentario))
                     continue  # resposta anterior sem comprovacao nao satisfaz o aceite

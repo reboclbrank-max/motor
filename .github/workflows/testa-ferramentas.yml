@@ -25,7 +25,7 @@ jobs:
           python-version: '3.12'
 
       - name: Barreira offline (sem rede, sem segredo)
-        run: python3 teste-casa.py
+        run: python3 rodar-contratos-offline.py teste-casa.py
 
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Ferramentas keyless ao vivo (de dentro do runner)

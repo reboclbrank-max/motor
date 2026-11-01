@@ -373,7 +373,18 @@ def contexto_pedido(texto):
 
 def escopo_leitura_operacional():
     """Restrição explícita do pedido atual; nunca amplia autorização."""
-    return _PEDIDO_ATUAL.get().lstrip().startswith(("<!--escopo:leitura-operacional-->","<!--escopo:planejamento-operacional-->"))
+    import intencao_operacional as I
+    return I.classificar(_PEDIDO_ATUAL.get()) is not None
+
+
+def pedido_atual():
+    return _PEDIDO_ATUAL.get()
+
+
+def exigir_recibo_operacional():
+    """Marcadores legados exigem comprovante; não reabrir finais naturais antigos."""
+    import intencao_operacional as I
+    return I.explicito(_PEDIDO_ATUAL.get())
 
 
 def pedido_explicito(texto=None):
