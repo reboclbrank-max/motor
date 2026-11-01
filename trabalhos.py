@@ -47,6 +47,29 @@ def salvar(registro, sha=None):
     return registro
 
 
+def gravar_entrega(identificador, etapa, conteudo):
+    """Arquivo novo por etapa; reentrada aceita só o MESMO conteúdo já gravado."""
+    path = f'MEMORIA/entregas/trabalho-{identificador}/etapa-{etapa}.md'
+    conteudo = texto(conteudo, 'conteudo')+'\n'
+    try:
+        info = C.gh('GET', f'/repos/{C.REPO}/contents/{path}')
+    except RuntimeError as e:
+        if 'HTTP 404' not in str(e):
+            raise
+        info = None
+    if info is None:
+        dados = {'message': 'trabalho: entrega privada por etapa',
+                 'content': base64.b64encode(conteudo.encode()).decode()}
+        resultado = C.gh('PUT', f'/repos/{C.REPO}/contents/{path}', dados)
+        if not isinstance(resultado, dict) or not (resultado.get('content') or {}).get('sha'):
+            raise RuntimeError('arquivo de entrega não confirmado')
+        info = C.gh('GET', f'/repos/{C.REPO}/contents/{path}')
+    if not isinstance(info, dict) or not info.get('content') or base64.b64decode(info['content']).decode() != conteudo:
+        raise ValueError('conteúdo da entrega diverge; não sobrescrever evidência')
+    C._gravar_local_memoria(path, conteudo, estrito=True)
+    return path
+
+
 def executar(argumento):
     dados = json.loads(argumento)
     if not isinstance(dados, dict):
@@ -75,7 +98,10 @@ def executar(argumento):
             etapa = registro['etapas'][numero-1]
             if etapa['estado'] != 'pendente':
                 raise ValueError('etapa já registrada; evidência anterior preservada')
-            path = texto(dados.get('arquivo'), 'arquivo')
+            if 'conteudo' in dados:
+                path = gravar_entrega(registro['id'], numero, dados['conteudo'])
+            else:
+                path = texto(dados.get('arquivo'), 'arquivo')
             if not path.startswith('MEMORIA/') or any(x in ('', '.', '..') for x in path.split('/')) or '?' in path or '#' in path or '\\' in path:
                 raise ValueError('evidência deve ser caminho privado em MEMORIA/')
             info = C.gh('GET', f'/repos/{C.REPO}/contents/{path}')

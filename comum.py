@@ -4101,7 +4101,7 @@ Fale SEMPRE português do Brasil — mesmo se o dono escrever em outra língua. 
 - [[YOUTUBE: https://...]] — dados de um vídeo
 - [[IMAGEM: descrição]] — gera uma imagem (aparece na resposta via link)
 - [[VERIFICAR: https://...]] — confere se um site está no ar
-- [[TRABALHO: JSON]] — registro privado de trabalho, não executor contínuo. JSON criar: acao=criar, objetivo (do pedido do dono), etapas (lista de textos). Outras ações usam id devolvido: status; bloquear com motivo; retomar; registrar_etapa com etapa (número) e arquivo (evidência existente em MEMORIA/); entregar com resultado. Só aceita entrega com evidência em todas as etapas; sai entregue_para_revisao, nunca aprovação automática. Para trabalho com várias etapas, registre plano, execute com as ferramentas existentes, guarde resultados em arquivos e registre evidências. Se uma ferramenta falhar, registre bloqueio; não invente conclusão. Registro não cria permissão para publicar, gastar ou agir externamente. Nunca diga que criou/atualizou trabalho sem retorno confirmado desta ferramenta.
+- [[TRABALHO: JSON]] — registro privado de trabalho, não executor contínuo. JSON criar: acao=criar, objetivo (do pedido do dono), etapas (lista de textos). Outras ações usam id devolvido: status; bloquear com motivo; retomar; registrar_etapa com etapa (número) e conteudo (texto do resultado produzido, que será salvo automaticamente em arquivo privado), ou arquivo (evidência já existente em MEMORIA/); entregar com resultado. Só aceita entrega com evidência em todas as etapas; sai entregue_para_revisao, nunca aprovação automática. Para trabalho com várias etapas, registre plano, execute com as ferramentas existentes, guarde resultados em arquivos e registre evidências. Se uma ferramenta falhar, registre bloqueio; não invente conclusão. Registro não cria permissão para publicar, gastar ou agir externamente. Nunca diga que criou/atualizou trabalho sem retorno confirmado desta ferramenta.
 - [[MEMORIA: termo]] — procura o que já está guardado na memória da empresa
 - [[ANOTAR: texto]] — grava uma anotação rápida na memória
 - [[LEMBRAR: fato]] — grava na memória longa (fatos e preferências duradouras)
@@ -4297,7 +4297,9 @@ def responder_com_ferramentas(historico, numero=None, preferir=None, preciso=Fal
         conversa = conversa + [
             {"role": "assistant", "content": texto},
             {"role": "user", "content": (f"[resultado da ferramenta {tipo}]\n{resultado[:6000]}\n\n"
-                                         "Continue e responda ao dono agora. Não cite os marcadores [[...]].")},
+                                         + ("Continue executando as etapas usando TRABALHO. Use registrar_etapa com conteudo para salvar seu resultado, e entregar quando todas as etapas tiverem evidência. Não pare após criar o plano e não anuncie entrega sem estado entregue_para_revisao. Não cite marcadores na resposta final."
+                                          if tipo == "TRABALHO" else
+                                          "Continue e responda ao dono agora. Não cite os marcadores [[...]]."))},
         ]
     texto, motor_nome, erro = chamar_llm(conversa + [
         {"role": "user", "content": "Responda agora usando o que já tem, sem pedir mais ferramentas."}], system,
