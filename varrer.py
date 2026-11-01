@@ -22,6 +22,30 @@ import tempfile
 import comum as C
 import responder
 
+def comentarios_verificados(numero):
+    """Consulta todas as páginas; falha não é lista vazia."""
+    pagina, todos = 1, []
+    while True:
+        dados = C.gh("GET", f"/repos/{C.REPO}/issues/{numero}/comments?per_page=100&page={pagina}")
+        if not isinstance(dados, list):
+            raise RuntimeError("comentarios_nao_observaveis")
+        todos.extend(dados)
+        if len(dados) < 100:
+            return todos
+        pagina += 1
+
+
+def entrega_confirmada(numero, marca):
+    alvo = "<!--resp:" + marca + "-->"
+    for c in comentarios_verificados(numero):
+        corpo = c.get("body") or ""
+        autor = (c.get("user") or {}).get("login")
+        if (autor in (C.DONO_GITHUB, "github-actions[bot]")
+                and corpo.startswith(C.ASSINATURA) and alvo in corpo):
+            return True
+    return False
+
+
 MAX_POR_RODADA = int(os.environ.get("MAX_POR_RODADA", "3"))
 # JANELA: uma mensagem do dono sem resposta não pode envelhecer em silêncio. Era 72 h com 30
 # conversas por leitura; com 100 por página e uma semana de janela, o que ficou para trás é
@@ -83,10 +107,12 @@ def pendentes(limite_dias=None, diagnostico=None):
         hours=JANELA_HORAS if limite_dias is None else limite_dias)
     try:
         issues = C.gh("GET", f"/repos/{C.REPO}/issues?state=open&sort=updated&direction=desc"
-                             f"&per_page={POR_PAGINA}") or []
+                             f"&per_page={POR_PAGINA}")
+        if not isinstance(issues, list):
+            raise RuntimeError("lista_de_conversas_invalida")
     except Exception as e:
-        log(f"não consegui listar as conversas: {e}")
-        return []
+        log(f"não consegui listar as conversas: {type(e).__name__}")
+        raise RuntimeError("conversas_nao_observaveis") from e
     achados = []
     for issue in issues:
         if issue.get("pull_request"):
@@ -104,10 +130,10 @@ def pendentes(limite_dias=None, diagnostico=None):
             continue
         numero = issue.get("number")
         try:
-            comentarios = C.gh("GET", f"/repos/{C.REPO}/issues/{numero}/comments?per_page=100") or []
+            comentarios = comentarios_verificados(numero)
         except Exception as e:
             log(f"conversa #{numero}: comentários ilegíveis ({type(e).__name__})")
-            continue
+            raise RuntimeError("comentarios_nao_observaveis") from e
         respondidas = {_marca_de(c.get("body")) for c in comentarios}
         # conversa sem comentário: a própria issue é a mensagem (marca a{numero})
         if not comentarios:
@@ -151,7 +177,7 @@ def _evento_falso(issue):
     return caminho
 
 
-def processar(issue, comentario):
+def _processar(issue, comentario):
     """Roda o responder para uma conversa pendente, sem deixar o processo morrer."""
     numero = issue.get("number")
     os.environ.pop("REPROCESSAR_ISSUE", None)
@@ -164,13 +190,39 @@ def processar(issue, comentario):
         os.environ["GITHUB_EVENT_NAME"] = "issues"
         os.environ["GITHUB_EVENT_PATH"] = _evento_falso(issue)
     try:
-        responder.principal()
-        return True
-    except SystemExit:
-        return True
+        marca = f"c{comentario.get('id')}" if comentario else f"a{numero}"
+        if entrega_confirmada(numero, marca):
+            return True
+        try:
+            codigo = responder.principal()
+        except SystemExit as e:
+            codigo = e.code
+        if codigo not in (None, 0):
+            return False
+        return entrega_confirmada(numero, marca)
     except Exception as e:
         log(f"conversa #{numero}: falhou ({type(e).__name__}: {str(e)[:120]})")
         return False
+
+
+def processar(issue, comentario):
+    nomes = ("REPROCESSAR_ISSUE", "REPROCESSAR_COMMENT", "GITHUB_EVENT_NAME", "GITHUB_EVENT_PATH")
+    antes = {nome: os.environ.get(nome) for nome in nomes}
+    try:
+        return _processar(issue, comentario)
+    finally:
+        evento = os.environ.get("GITHUB_EVENT_PATH")
+        if not comentario and evento and evento != antes["GITHUB_EVENT_PATH"]:
+            try:
+                os.unlink(evento)
+                os.rmdir(os.path.dirname(evento))
+            except OSError:
+                pass
+        for nome, valor in antes.items():
+            if valor is None:
+                os.environ.pop(nome, None)
+            else:
+                os.environ[nome] = valor
 
 
 def acordar_de_novo(motivo="fila"):
@@ -198,7 +250,11 @@ def main(processar_um=None, disparar=None):
     processar_um = processar_um or processar
     disparar = disparar or acordar_de_novo
     diagnostico = {}
-    lista = pendentes(diagnostico=diagnostico)
+    try:
+        lista = pendentes(diagnostico=diagnostico)
+    except Exception as e:
+        log(f"fila não observável: {type(e).__name__}")
+        return 2
     if diagnostico.get("ignoradas_do_robo"):
         log(f"{diagnostico['ignoradas_do_robo']} conversa(s) só com fala da casa — não é pergunta")
     if not lista:
@@ -215,7 +271,7 @@ def main(processar_um=None, disparar=None):
         disparar(f"faltam {restantes}")
     elif restantes > 0:
         log(f"{restantes} seguem na fila: nenhuma resposta saiu nesta rodada, cadeia NÃO pedida")
-    return 0
+    return 1 if feitas < len(lista[:MAX_POR_RODADA]) else 0
 
 
 if __name__ == "__main__":

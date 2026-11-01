@@ -76,7 +76,9 @@ jobs:
           "
 
       - name: Barreira offline (sem rede, sem segredo)
-        run: python3 teste-casa.py
+        run: |
+          python3 teste-casa.py
+          python3 teste-entrega-verificada.py
 
       - name: Baixar a memória do repositório privado
         env:
