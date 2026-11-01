@@ -398,12 +398,38 @@ def html_para_texto(bruto):
     return " ".join(p.titulo).strip(), texto.strip()
 
 
+class URLPublicaNegada(ValueError):pass
+
+def _validar_url_publica(url):
+    try:
+        p=urllib.parse.urlsplit(url)
+        if (p.scheme.lower() not in ('http','https') or not p.hostname or
+            p.username is not None or p.password is not None or
+            any(ord(c)<=32 or ord(c)==127 for c in url) or
+            (p.port is not None and not 1<=p.port<=65535)):
+            raise URLPublicaNegada('endereço inválido, credencial na URL ou protocolo não permitido')
+        if not host_publico(p.hostname):raise URLPublicaNegada('destino interno ou não verificável')
+    except URLPublicaNegada:raise
+    except Exception:raise URLPublicaNegada('endereço inválido') from None
+    return url
+
+class _RedirectPublico(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self,req,fp,code,msg,headers,newurl):
+        _validar_url_publica(newurl)
+        return super().redirect_request(req,fp,code,msg,headers,newurl)
+
+def _abrir_publico(req, timeout=30):
+    _validar_url_publica(req.full_url)
+    r=urllib.request.build_opener(_RedirectPublico()).open(req,timeout=timeout)
+    try:_validar_url_publica(r.geturl())
+    except Exception:r.close();raise
+    return r
+
 def _buscar_bytes(url, cabecalhos, limite=400000, timeout=30):
     req = urllib.request.Request(url)
-    for k, v in cabecalhos.items():
-        req.add_header(k, v)
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return r.read(limite), r.headers.get("Content-Type", ""), r.geturl()
+    for k, v in cabecalhos.items():req.add_header(k,v)
+    with _abrir_publico(req,timeout=timeout) as r:
+        return r.read(limite),r.headers.get('Content-Type',''),r.geturl()
 
 
 def host_publico(host):
@@ -411,12 +437,13 @@ def host_publico(host):
         infos = socket.getaddrinfo(host, None)
     except Exception:
         return False
+    if not infos:return False
     for _familia, _tipo, _proto, _canon, sock in infos:
         try:
             ip = ipaddress.ip_address(sock[0])
         except ValueError:
             return False
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+        if not ip.is_global or ip.is_multicast:
             return False
     return True
 
@@ -502,9 +529,8 @@ def abrir_url(url, limite_texto=6000):
     url = url.strip().strip("<>\"'")
     if not re.match(r"^https?://", url, re.IGNORECASE):
         url = "https://" + url
-    partes = urllib.parse.urlparse(url)
-    if not partes.hostname or not host_publico(partes.hostname):
-        return "", "Não consegui abrir esse endereço (inválido ou interno)."
+    try:_validar_url_publica(url)
+    except URLPublicaNegada:return "", "Não consegui abrir esse endereço (inválido, interno ou com credencial)."
 
     e_pdf = url.lower().split("?")[0].endswith(".pdf")
 
@@ -525,6 +551,8 @@ def abrir_url(url, limite_texto=6000):
                 return titulo, (cabeca + corpo)[:limite_texto]
         except urllib.error.HTTPError as e:
             log(f"abrir direto: HTTP {e.code} — tentando o leitor de páginas")
+        except URLPublicaNegada:
+            return "", "Redirecionamento bloqueado: destino interno, inválido ou com credencial."
         except Exception as e:
             log(f"abrir direto: {str(e)[:80]} — tentando o leitor de páginas")
 
@@ -1171,8 +1199,10 @@ def ferramenta_verificar(argumento):
     try:
         req = urllib.request.Request(url, method="GET")
         req.add_header("User-Agent", UA_NAVEGADOR)
-        with urllib.request.urlopen(req, timeout=25) as r:
+        with _abrir_publico(req, timeout=25) as r:
             return f"{url} → HTTP {r.status} em {int((time.time()-t0)*1000)}ms ✓ no ar"
+    except URLPublicaNegada:
+        return "Verificação bloqueada: endereço interno, inválido, com credencial ou redirecionamento não permitido."
     except urllib.error.HTTPError as e:
         return (f"{url} → HTTP {e.code} em {int((time.time()-t0)*1000)}ms"
                 + ("\n_(se quiser, veja a última versão que funcionou: `arquivo: " + url + "`)_" if e.code >= 400 else ""))
@@ -4565,7 +4595,7 @@ def pensar_bem(pergunta, system=None):
     if not tb:
         return ta, f"respondi só com {ma} (o segundo motor caiu)"
     juiz = (f"Você é um juiz. Abaixo, a pergunta do dono e duas respostas de motores diferentes.\n\n"
-            f"PERGUNTA:\n{pergunta[:600]}\n\nRESPOSTA A ({ma}):\n{ta[:4000]}\n\nRESPOSTA B ({mb}):\n{tb[:4000]}\n\n"
+            f"PERGUNTA:\n{pergunta}\n\nRESPOSTA A ({ma}):\n{ta[:4000]}\n\nRESPOSTA B ({mb}):\n{tb[:4000]}\n\n"
             "Escolha a melhor e escreva a VERSÃO FINAL melhorada, em português, completa e direta. "
             "Não explique a escolha — só entregue a resposta final.")
     tf, mj, _ej = chamar_llm([{"role": "user", "content": juiz}], "")
