@@ -36,12 +36,15 @@ def comentarios_verificados(numero):
         pagina += 1
 
 
-def entrega_confirmada(numero, marca):
+def entrega_confirmada(numero, marca, operacional=False):
     alvo = "<!--resp:" + marca + "-->"
     for c in comentarios_verificados(numero):
         corpo = c.get("body") or ""
         autor = (c.get("user") or {}).get("login")
         if C.comentario_e_resposta_final(c) and alvo in corpo:
+            if operacional:
+                import operacao_leitura as O
+                if O.marcador(marca) not in corpo:continue
             return True
     return False
 
@@ -163,6 +166,11 @@ def pendentes(limite_dias=None, diagnostico=None):
                 continue
             if comentario is None and comentarios and not (mensagem.get("body") or "").strip():
                 continue  # abertura vazia não acrescenta pedido ao histórico já existente
+            import operacao_leitura as O
+            if marca in respondidas and (numero,marca) not in revisao and (mensagem.get("body") or "").lstrip().startswith(O.PREFIXO):
+                if not any(C.comentario_e_resposta_final(c) and O.marcador(marca) in (c.get("body") or "") and ("<!--resp:"+marca+"-->") in (c.get("body") or "") for c in comentarios):
+                    achados.append((issue,comentario))
+                    continue  # resposta anterior sem comprovacao nao satisfaz o aceite
             if marca in respondidas:
                 if diagnostico is not None:
                     diagnostico["ja_respondidas"] += 1
@@ -208,8 +216,10 @@ def _processar(issue, comentario):
         os.environ["GITHUB_EVENT_NAME"] = "issues"
         os.environ["GITHUB_EVENT_PATH"] = _evento_falso(issue)
     try:
+        import operacao_leitura as O
+        operacional=((comentario or issue).get("body") or "").lstrip().startswith(O.PREFIXO)
         marca = f"c{comentario.get('id')}" if comentario else f"a{numero}"
-        if entrega_confirmada(numero, marca):
+        if (entrega_confirmada(numero, marca, True) if operacional else entrega_confirmada(numero, marca)):
             return True
         try:
             codigo = responder.principal()
@@ -217,7 +227,7 @@ def _processar(issue, comentario):
             codigo = e.code
         if codigo not in (None, 0):
             return False
-        return entrega_confirmada(numero, marca)
+        return entrega_confirmada(numero, marca, True) if operacional else entrega_confirmada(numero, marca)
     except Exception as e:
         log(f"conversa #{numero}: falhou ({type(e).__name__}: {str(e)[:120]})")
         return False
