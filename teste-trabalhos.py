@@ -1,0 +1,117 @@
+#!/usr/bin/env python3
+import base64
+import copy
+import json
+import unittest
+from unittest.mock import patch
+import comum as C
+import trabalhos as T
+
+
+class Trabalhos(unittest.TestCase):
+    def setUp(self):
+        self.store = {}
+        self.writes = 0
+        def gh(method, path, data=None):
+            path = path.split('/contents/')[1]
+            if method == 'GET':
+                if path not in self.store:
+                    raise RuntimeError('HTTP 404')
+                return copy.deepcopy(self.store[path])
+            antigo = self.store.get(path)
+            if antigo and data.get('sha') != antigo['sha']:
+                raise RuntimeError('HTTP 409 conflito')
+            self.writes += 1
+            info = {'content': data['content'], 'sha': f'sha{self.writes}'}
+            self.store[path] = info
+            return {'content': {'sha': info['sha']}}
+        for p in [patch.object(C, 'gh', gh), patch.object(C, '_gravar_local_memoria', return_value=True)]:
+            p.start(); self.addCleanup(p.stop)
+
+    def chamar(self, **dados):
+        return json.loads(C.executar_ferramenta('TRABALHO', json.dumps(dados)))
+
+    def criar(self):
+        return self.chamar(acao='criar', objetivo='Preparar relatório controlado', etapas=['Pesquisar', 'Redigir'])
+
+    def evidencia(self, path='MEMORIA/entregas/prova.md', body='conteúdo verificável', sha='blob1'):
+        self.store[path] = {'content': base64.b64encode(body.encode()).decode(), 'sha': sha}
+        return path
+
+    def test_criar_e_recuperar_depois(self):
+        r = self.criar()
+        self.assertEqual(r['estado'], 'planejado')
+        self.assertEqual(self.chamar(acao='status', id=r['id'])['objetivo'], r['objetivo'])
+        self.assertEqual(len(r['etapas']), 2)
+
+    def test_nao_entrega_sem_evidencias(self):
+        r = self.criar()
+        with self.assertRaisesRegex(ValueError, 'sem evidência'):
+            self.chamar(acao='entregar', id=r['id'], resultado='pronto')
+        self.assertEqual(self.chamar(acao='status', id=r['id'])['estado'], 'planejado')
+
+    def test_bloqueio_e_retomada_preservam_etapas(self):
+        r = self.criar()
+        b = self.chamar(acao='bloquear', id=r['id'], motivo='serviço indisponível')
+        self.assertEqual(b['estado'], 'bloqueado')
+        b = self.chamar(acao='retomar', id=r['id'])
+        self.assertEqual(b['estado'], 'em_execucao')
+        self.assertEqual(b['etapas'], r['etapas'])
+
+    def test_entrega_para_revisao_com_arquivos(self):
+        r = self.criar(); path = self.evidencia()
+        for n in [1, 2]:
+            self.chamar(acao='registrar_etapa', id=r['id'], etapa=n, arquivo=path)
+        r = self.chamar(acao='entregar', id=r['id'], resultado='relatório disponível')
+        self.assertEqual(r['estado'], 'entregue_para_revisao')
+        self.assertNotEqual(r['estado'], 'concluido')
+        with self.assertRaises(ValueError):
+            self.chamar(acao='retomar', id=r['id'])
+
+    def test_evidencia_modificada_impede_entrega(self):
+        r = self.criar(); path = self.evidencia()
+        for n in [1, 2]:
+            self.chamar(acao='registrar_etapa', id=r['id'], etapa=n, arquivo=path)
+        self.store[path]['sha'] = 'outro-blob'
+        with self.assertRaisesRegex(ValueError, 'mudou'):
+            self.chamar(acao='entregar', id=r['id'], resultado='pronto')
+
+    def test_evidencia_ausente_ou_vazia(self):
+        r = self.criar()
+        with self.assertRaises(RuntimeError):
+            self.chamar(acao='registrar_etapa', id=r['id'], etapa=1, arquivo='MEMORIA/ausente.md')
+        path = self.evidencia(body='')
+        with self.assertRaises(ValueError):
+            self.chamar(acao='registrar_etapa', id=r['id'], etapa=1, arquivo=path)
+
+    def test_nao_aceita_caminho_externo_ou_traversal(self):
+        r = self.criar()
+        for path in ['https://exemplo.com', '../MEMORIA/x', 'MEMORIA/../x', 'MEMORIA/x?ref=y']:
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                self.chamar(acao='registrar_etapa', id=r['id'], etapa=1, arquivo=path)
+
+    def test_conflito_nao_sobrescreve(self):
+        r = self.criar()
+        antigo, sha = T.carregar(r['id'])
+        self.chamar(acao='bloquear', id=r['id'], motivo='bloqueio novo')
+        with self.assertRaisesRegex(RuntimeError, '409'):
+            T.salvar(antigo, sha)
+        self.assertEqual(self.chamar(acao='status', id=r['id'])['bloqueio'], 'bloqueio novo')
+
+    def test_rejeita_ids_e_planos_invalidos(self):
+        for id in ['../arquivo', 'inventado', None]:
+            with self.assertRaises(ValueError):
+                self.chamar(acao='status', id=id)
+        with self.assertRaises(ValueError):
+            self.chamar(acao='criar', objetivo='teste', etapas=[])
+
+    def test_marcador_e_roteador_estao_ligados(self):
+        dado = json.dumps({'acao':'criar', 'objetivo':'teste', 'etapas':['validar']})
+        achado = C.RE_FERRAMENTA.search('[[TRABALHO: '+dado+']]')
+        self.assertEqual(achado.group(1), 'TRABALHO')
+        r = json.loads(C.executar_ferramenta(*achado.groups()))
+        self.assertEqual(r['estado'], 'planejado')
+
+
+if __name__ == '__main__':
+    unittest.main(verbosity=2)

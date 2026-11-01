@@ -85,9 +85,7 @@ def ja_respondida(numero, marca):
     alvo = MARCA_ABERTURA + marca + "-->"
     comentarios = C.comentarios_da_conversa_verificados(numero)
     return any(
-        (c.get("user") or {}).get("login") in (C.DONO_GITHUB, "github-actions[bot]")
-        and (c.get("body") or "").startswith(C.ASSINATURA)
-        and alvo in (c.get("body") or "")
+        C.comentario_e_resposta_final(c) and alvo in (c.get("body") or "")
         for c in comentarios)
 
 
@@ -100,7 +98,7 @@ def _parar_batida():
         _BATIDA = None
 
 
-def responder(numero, texto, marca, extra="", editar=None):
+def responder(numero, texto, marca, extra="", editar=None, pendente=False):
     """Publica a resposta — com rodapé e marca invisível de dedupe.
 
     `editar=<id do comentário>` reescreve o aviso "estou pensando" no lugar de criar outro
@@ -112,7 +110,18 @@ def responder(numero, texto, marca, extra="", editar=None):
     corpo = f"{C.ASSINATURA}\n\n{texto}"
     if extra:
         corpo += f"\n\n---\n{extra}"
-    corpo += f"\n\n{MARCA_ABERTURA}{marca}-->"
+    if pendente:
+        corpo += f"\n\n<!--estado:pendente--><!--pendente:{marca}-->"
+        if not editar:
+            for c in C.comentarios_da_conversa_verificados(numero):
+                autor = (c.get("user") or {}).get("login")
+                if (autor in (C.DONO_GITHUB, "github-actions[bot]")
+                        and (c.get("body") or "").startswith(C.ASSINATURA)
+                        and f"<!--pendente:{marca}-->" in (c.get("body") or "")):
+                    editar = c.get("id")
+                    break
+    else:
+        corpo += f"\n\n{MARCA_ABERTURA}{marca}-->"
     if editar and C.editar_comentario(editar, corpo):
         return
     C.comentar(numero, corpo)
@@ -634,6 +643,15 @@ def modo_direto(texto):
 
 # ------------------------------------------------------------------ principal
 
+def garantir_pendencia(numero, texto, marca):
+    """Não anunciar persistência sem gravar ou conferir item já existente."""
+    if C.fila_respostas_adicionar(numero, texto, marca):
+        return
+    if not any(i.get("numero") == numero and i.get("marca") == marca
+               for i in C.fila_respostas_carregar()):
+        raise RuntimeError("nao consegui persistir a pendencia")
+
+
 def drenar_fila_respostas(orcamento_s=180):
     """Drena sem teto de contagem; confirma entrega e salva progresso por item.
 
@@ -811,8 +829,15 @@ def principal():
         # fila de respostas pendentes: motores voltaram → respondo o que ficou devendo
         try:
             drenar_fila_respostas()
+            if ja_respondida(numero, marca):
+                return 0
         except Exception as e:
             C.log(f"drenar fila: {e}")
+
+        if baixo.startswith("trabalho:"):
+            resultado = C.executar_ferramenta("TRABALHO", texto.split(":", 1)[1])
+            responder(numero, resultado, marca)
+            return 0
 
         if baixo in ("/ajuda", "/help", "ajuda", "/comandos") and len(texto) < 20:
             responder(numero, ajuda(), marca)
@@ -1190,7 +1215,10 @@ def principal():
             if usos:
                 rodape += " · usei: " + "; ".join(usos)
             rodape += ")_"
-            responder(numero, resposta, marca, extra=rodape, editar=aviso_pensando)
+            if resposta_falha:
+                garantir_pendencia(numero, texto, marca)
+            responder(numero, resposta, marca, extra=rodape, editar=aviso_pensando,
+                      pendente=resposta_falha)
             registrar_tempo()
             C.registrar_conversa(numero, texto, resposta, motor_nome or "modo direto")
             try:
@@ -1212,20 +1240,17 @@ def principal():
                 reserva = C.resposta_de_reserva(texto)
             except Exception as e:
                 C.log(f"cérebro de reserva indisponível: {e}")
+            garantir_pendencia(numero, texto, marca)
             if reserva:
                 responder(numero,
                           "🗄 **Cérebro de reserva (100% meu, sem motores):** os motores online estão fora do ar "
                           "agora, mas achei no meu próprio histórico uma resposta parecida com a sua pergunta:\n\n"
                           "---\n\n" + reserva + "\n\n---",
-                          marca, editar=aviso_pensando,
+                          marca, editar=aviso_pensando, pendente=True,
                           extra="Quando os motores voltarem eu respondo melhor. Essa resposta veio do meu arquivo de memória.")
                 C.registrar_diario(f"- **{C.agora().strftime('%d/%m %H:%M')}** — dono: "
                                    f"{texto[:MAX_RESUMO].replace(chr(10), ' ')} → RESERVA (motores fora do ar)")
                 return 0
-            try:
-                C.fila_respostas_adicionar(numero, texto, marca)
-            except Exception as e:
-                C.log(f"fila de respostas: {e}")
             responder(numero,
                       "⚠️ Agora não consegui responder: **os motores gratuitos estão todos fora do ar no momento** "
                       "(isso costuma durar minutos).\n\n"
@@ -1235,7 +1260,7 @@ def principal():
                       "`noticias:`, `hora:`, `imagem:`, `verificar:`, `memoria:`, `anotar:`, `lembrar:`, "
                       "`avise quando:`, `lembrete:`, `/status`.\n\n"
                       f"_Detalhe técnico: `{str(erro)[:200]}`_",
-                      marca, editar=aviso_pensando,
+                      marca, editar=aviso_pensando, pendente=True,
                       extra="Mensagem na fila de respostas — o vigia e a próxima mensagem drenam a fila sozinhos.")
             C.registrar_diario(f"- **{C.agora().strftime('%d/%m %H:%M')}** — dono: "
                                f"{texto[:MAX_RESUMO].replace(chr(10), ' ')} → FALHA de motores")

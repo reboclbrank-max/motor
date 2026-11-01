@@ -135,7 +135,7 @@ RE_FERRAMENTA = re.compile(
     r"|LEMBRETE|LEMBRETES|VIGIAR|AVISO_TESTE|REPO|ACOES|TESTAR|PLANTAR|GHSEARCH|SAUDE|ESPIAR|CACA|MUSEU"
     # estado real da casa (2026-10-24). Sem entrar nesta regex, o marcador que o cérebro
     # escreve nunca é executado — a ferramenta existiria só no dicionário.
-    r"|CASA|METAS|PUBLICAR|DIAGNOSTICAR|MEDIR)"
+    r"|CASA|METAS|PUBLICAR|DIAGNOSTICAR|MEDIR|TRABALHO)"
     r"\s*:\s*(.*?)\s*\]\]",
     re.IGNORECASE | re.DOTALL)
 
@@ -3053,6 +3053,9 @@ def _ferramenta_acao(acao):
 def executar_ferramenta(tipo, argumento):
     tipo = tipo.upper()
     argumento = argumento.strip().strip('"“”\'')
+    if tipo == "TRABALHO":
+        import trabalhos
+        return trabalhos.executar(argumento)
     funcoes = {
         "PESQUISAR": _ferramenta_pesquisar,
         "ABRIR": _ferramenta_abrir,
@@ -4098,6 +4101,7 @@ Fale SEMPRE português do Brasil — mesmo se o dono escrever em outra língua. 
 - [[YOUTUBE: https://...]] — dados de um vídeo
 - [[IMAGEM: descrição]] — gera uma imagem (aparece na resposta via link)
 - [[VERIFICAR: https://...]] — confere se um site está no ar
+- [[TRABALHO: JSON]] — registro privado de trabalho, não executor contínuo. JSON criar: acao=criar, objetivo (do pedido do dono), etapas (lista de textos). Outras ações usam id devolvido: status; bloquear com motivo; retomar; registrar_etapa com etapa (número) e arquivo (evidência existente em MEMORIA/); entregar com resultado. Só aceita entrega com evidência em todas as etapas; sai entregue_para_revisao, nunca aprovação automática. Para trabalho com várias etapas, registre plano, execute com as ferramentas existentes, guarde resultados em arquivos e registre evidências. Se uma ferramenta falhar, registre bloqueio; não invente conclusão. Registro não cria permissão para publicar, gastar ou agir externamente. Nunca diga que criou/atualizou trabalho sem retorno confirmado desta ferramenta.
 - [[MEMORIA: termo]] — procura o que já está guardado na memória da empresa
 - [[ANOTAR: texto]] — grava uma anotação rápida na memória
 - [[LEMBRAR: fato]] — grava na memória longa (fatos e preferências duradouras)
@@ -4180,6 +4184,23 @@ Quando o dono disser "me avise quando…", "quero ser avisado se…", "me lembra
 ### Esta conversa até agora (registro próprio)
 {registro_conversa or "(vazio)"}
 """
+
+
+def comentario_e_resposta_final(comentario):
+    """Entrega de resposta, não certificado de conclusão de trabalho externo.
+
+    Aceita o contrato legado, exceto os avisos de indisponibilidade conhecidos.
+    """
+    autor = (comentario.get("user") or {}).get("login")
+    corpo = comentario.get("body") or ""
+    if autor not in (DONO_GITHUB, "github-actions[bot]") or not corpo.startswith(ASSINATURA):
+        return False
+    if "<!--estado:pendente-->" in corpo:
+        return False
+    texto = corpo[len(ASSINATURA):].lstrip()
+    avisos = ("🚦 **Não consegui falar com nenhum motor agora**",
+              "⚠️ Agora não consegui responder:", "🗄 **Cérebro de reserva (100% meu, sem motores):**")
+    return "<!--resp:" in corpo and not texto.startswith(avisos)
 
 
 def comentarios_da_conversa_verificados(numero):
@@ -4517,16 +4538,23 @@ def pensar_bem(pergunta, system=None):
     return tf, f"{ma} + {mb}, juiz {mj}"
 
 
-# ================================================================ fila de respostas (v3.13)
+# ================================================================ fila de respostas
 
 def fila_respostas_carregar():
-    """Perguntas do dono que ficaram sem motor; respondidas quando os motores voltam."""
+    """Leitura estrita: indisponibilidade/corrupção não equivale a fila vazia."""
     try:
-        bruto = ler_remoto(ARQ_FILA_RESPOSTAS, "[]")
-        itens = json.loads(bruto) if bruto else []
-        return itens if isinstance(itens, list) else []
-    except Exception:
-        return []
+        info = gh("GET", f"/repos/{REPO}/contents/{ARQ_FILA_RESPOSTAS}")
+    except RuntimeError as e:
+        if "→ HTTP 404:" in str(e):
+            return []
+        raise
+    if not isinstance(info, dict) or not isinstance(info.get("content"), str):
+        raise RuntimeError("fila_nao_observavel")
+    bruto = base64.b64decode(info["content"]).decode("utf-8")
+    itens = json.loads(bruto)
+    if not isinstance(itens, list) or any(not isinstance(i, dict) for i in itens):
+        raise RuntimeError("fila_invalida")
+    return itens
 
 
 def fila_respostas_salvar(itens):
@@ -4537,35 +4565,8 @@ def fila_respostas_salvar(itens):
 
 def fila_respostas_adicionar(numero, texto, marca):
     itens = fila_respostas_carregar()
-    if any(i.get("marca") == marca for i in itens):
-        return False  # já está na fila
-    itens.append({"numero": numero, "texto": (texto or ""), "marca": marca,
-                  "em": agora().isoformat(timespec="seconds")})
-    return fila_respostas_salvar(itens)
-
-
-# ================================================================ fila de respostas (v3.13)
-
-def fila_respostas_carregar():
-    """Perguntas do dono que ficaram sem motor; respondidas quando os motores voltam."""
-    try:
-        bruto = ler_remoto(ARQ_FILA_RESPOSTAS, "[]")
-        itens = json.loads(bruto) if bruto else []
-        return itens if isinstance(itens, list) else []
-    except Exception:
-        return []
-
-
-def fila_respostas_salvar(itens):
-    return escrever_remoto(ARQ_FILA_RESPOSTAS,
-                           json.dumps(itens, ensure_ascii=False, indent=1),
-                           "fila de respostas pendentes")
-
-
-def fila_respostas_adicionar(numero, texto, marca):
-    itens = fila_respostas_carregar()
-    if any(i.get("marca") == marca for i in itens):
-        return False  # já está na fila
+    if any(i.get("marca") == marca and i.get("numero") == numero for i in itens):
+        return False
     itens.append({"numero": numero, "texto": (texto or ""), "marca": marca,
                   "em": agora().isoformat(timespec="seconds")})
     return fila_respostas_salvar(itens)
