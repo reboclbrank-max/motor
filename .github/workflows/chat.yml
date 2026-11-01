@@ -97,6 +97,7 @@ jobs:
           python3 teste-candidatos-robustos.py
           python3 teste-sentinela-fila-canonica.py
           python3 teste-operacao-leitura.py
+          python3 teste-planejamento-operacional.py
 
       - name: Baixar a memória do repositório privado
         env:
