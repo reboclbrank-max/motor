@@ -155,6 +155,56 @@ class Trabalhos(unittest.TestCase):
         C.rastrear_entrega_trabalho('TRABALHO', 'Eu concluí tudo', usos)
         self.assertEqual(usos, [])
 
+    def test_queda_entre_arquivo_e_checkpoint_recupera_sem_sobrescrever(self):
+        with T.contexto_mensagem(42,'a42','pedido de teste'):
+            r=self.criar()
+            with patch.object(T,'salvar',side_effect=RuntimeError('queda antes checkpoint')):
+                with self.assertRaisesRegex(RuntimeError,'queda'):
+                    self.chamar(acao='registrar_etapa',id=r['id'],etapa=1,conteudo='resultado salvo antes da queda')
+        with T.contexto_mensagem(42,'a42','pedido de teste'):
+            recuperado=self.criar()
+            self.assertEqual(recuperado['id'],r['id'])
+            self.assertEqual(recuperado['etapas'][0]['estado'],'pendente')
+            self.assertIn('arquivo salvo sem checkpoint',T.instrucoes_da_origem())
+            inspecao=self.chamar(acao='inspecionar_etapa',id=r['id'],etapa=1)
+            self.assertEqual(inspecao['conteudo'],'resultado salvo antes da queda\n')
+            self.assertFalse(inspecao['checkpoint'])
+            novo=self.chamar(acao='registrar_etapa',id=r['id'],etapa=1,arquivo=inspecao['arquivo'],sha_esperado=inspecao['sha_esperado'])
+            self.assertEqual(novo['etapas'][0]['evidencia']['sha_blob'],inspecao['sha_esperado'])
+            self.assertEqual(self.store[inspecao['arquivo']]['sha'],inspecao['sha_esperado'])
+            self.assertEqual(len([p for p in self.store if p.startswith('MEMORIA/trabalhos/')]),1)
+
+    def test_inspecionar_e_somente_leitura(self):
+        r=self.criar();T.gravar_entrega(r['id'],1,'rascunho recuperável')
+        antes=self.writes
+        v=self.chamar(acao='inspecionar_etapa',id=r['id'],etapa=1)
+        self.assertTrue(v['disponivel']);self.assertFalse(v['checkpoint'])
+        self.assertEqual(antes,self.writes)
+        self.assertEqual(self.chamar(acao='status',id=r['id'])['etapas'][0]['estado'],'pendente')
+
+    def test_artefato_mudou_apos_inspecao_nao_registra_versao_diferente(self):
+        r=self.criar();T.gravar_entrega(r['id'],1,'rascunho')
+        v=self.chamar(acao='inspecionar_etapa',id=r['id'],etapa=1)
+        self.store[v['arquivo']]['sha']='versao-outra'
+        with self.assertRaisesRegex(ValueError,'mudou'):
+            self.chamar(acao='registrar_etapa',id=r['id'],etapa=1,arquivo=v['arquivo'],sha_esperado=v['sha_esperado'])
+        self.assertEqual(self.chamar(acao='status',id=r['id'])['etapas'][0]['estado'],'pendente')
+
+    def test_recuperacao_exige_sha_lido(self):
+        r=self.criar();path=T.gravar_entrega(r['id'],1,'rascunho')
+        with self.assertRaisesRegex(ValueError,'sha_esperado'):
+            self.chamar(acao='registrar_etapa',id=r['id'],etapa=1,arquivo=path)
+
+    def test_artefato_ainda_nao_criado_e_ausente_sem_checkpoint(self):
+        r=self.criar();v=self.chamar(acao='inspecionar_etapa',id=r['id'],etapa=1)
+        self.assertFalse(v['disponivel']);self.assertFalse(v['checkpoint'])
+
+    def test_erro_de_consulta_nao_e_artefato_ausente(self):
+        r=self.criar()
+        with patch.object(C,'gh',side_effect=RuntimeError('HTTP 503')):
+            with self.assertRaises(RuntimeError):
+                T.inspecionar_etapa(r,1)
+
     def test_marcador_e_roteador_estao_ligados(self):
         dado = json.dumps({'acao':'criar', 'objetivo':'teste', 'etapas':['validar']})
         achado = C.RE_FERRAMENTA.search('[[TRABALHO: '+dado+']]')

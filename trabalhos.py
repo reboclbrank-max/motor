@@ -63,9 +63,19 @@ def instrucoes_da_origem():
     registro = recuperar_da_origem()
     if registro is None:
         return ''
+    aviso = ''
+    for etapa in registro['etapas']:
+        if etapa['estado'] == 'pendente':
+            candidato = inspecionar_etapa(registro, etapa['numero'])
+            if candidato['disponivel']:
+                aviso = (' Há um arquivo salvo sem checkpoint na etapa '+str(etapa['numero'])+
+                         '. Antes de refazer, use TRABALHO/inspecionar_etapa para ler o conteúdo. '
+                         'Se o resultado servir à etapa, registre usando arquivo e sha_esperado devolvidos. '
+                         'Existência de arquivo não comprova qualidade ou conclusão.')
+            break
     return ('Há trabalho persistido para ESTA mensagem. Não crie cópia nem refaça etapas com evidência. '
             'Use o ID abaixo, execute somente etapas pendentes e entregue quando terminar. '
-            'Não invente execução ou conclusão. Estado observado: '+json.dumps(registro, ensure_ascii=False))
+            'Não invente execução ou conclusão. Estado observado: '+json.dumps(registro, ensure_ascii=False)+aviso)
 
 
 def caminho(identificador):
@@ -103,9 +113,39 @@ def salvar(registro, sha=None):
     return registro
 
 
+def arquivo_da_etapa(identificador, numero):
+    caminho(identificador)  # valida namespace
+    if type(numero) is not int or numero <= 0:
+        raise ValueError('etapa inválida')
+    return f'MEMORIA/entregas/trabalho-{identificador}/etapa-{numero}.md'
+
+
+def inspecionar_etapa(registro, numero):
+    if type(numero) is not int or not 1 <= numero <= len(registro['etapas']):
+        raise ValueError('etapa inválida')
+    etapa = registro['etapas'][numero-1]
+    ev = etapa.get('evidencia')
+    path = ev['arquivo'] if ev else arquivo_da_etapa(registro['id'], numero)
+    try:
+        info = C.gh('GET', f'/repos/{C.REPO}/contents/{path}')
+    except RuntimeError as e:
+        if re.search(r'HTTP 404(?:\D|$)', str(e)) and not ev:
+            return {'etapa': numero, 'arquivo': path, 'disponivel': False, 'checkpoint': False}
+        raise
+    if not isinstance(info, dict) or not info.get('sha') or not isinstance(info.get('content'), str):
+        raise RuntimeError('artefato não observável')
+    conteudo = base64.b64decode(info['content']).decode('utf-8')
+    if not conteudo.strip():
+        raise ValueError('artefato vazio; não recuperar como evidência')
+    if ev and ev['sha_blob'] != info['sha']:
+        raise ValueError('arquivo diverge da evidência registrada')
+    return {'etapa': numero, 'arquivo': path, 'sha_esperado': info['sha'],
+            'disponivel': True, 'checkpoint': bool(ev), 'conteudo': conteudo}
+
+
 def gravar_entrega(identificador, etapa, conteudo):
     """Arquivo novo por etapa; reentrada aceita só o MESMO conteúdo já gravado."""
-    path = f'MEMORIA/entregas/trabalho-{identificador}/etapa-{etapa}.md'
+    path = arquivo_da_etapa(identificador, etapa)
     conteudo = texto(conteudo, 'conteudo')+'\n'
     try:
         info = C.gh('GET', f'/repos/{C.REPO}/contents/{path}')
@@ -151,6 +191,8 @@ def executar(argumento):
         registro, sha = carregar(dados.get('id'))
         if acao == 'status':
             return json.dumps(registro, ensure_ascii=False)
+        if acao == 'inspecionar_etapa':
+            return json.dumps(inspecionar_etapa(registro, dados.get('etapa')), ensure_ascii=False)
         if registro['estado'] == 'entregue_para_revisao':
             raise ValueError('trabalho já entregue para revisão; registro preservado')
         if acao == 'registrar_etapa':
@@ -171,6 +213,13 @@ def executar(argumento):
                 raise ValueError('evidência não observável')
             if not base64.b64decode(info['content']).strip():
                 raise ValueError('arquivo de evidência vazio')
+            esperado = dados.get('sha_esperado')
+            if 'conteudo' not in dados and path == arquivo_da_etapa(registro['id'], numero) and not esperado:
+                raise ValueError('inspecione o arquivo recuperado e informe sha_esperado')
+            if esperado is not None and esperado != info['sha']:
+                raise ValueError('artefato mudou após inspeção; não confirmar checkpoint')
+            if path == arquivo_da_etapa(registro['id'], numero):
+                C._gravar_local_memoria(path, base64.b64decode(info['content']).decode('utf-8'), estrito=True)
             etapa.update(estado='evidencia_registrada', evidencia={'arquivo': path, 'sha_blob': info['sha']})
             registro.update(estado='em_execucao', bloqueio=None)
         elif acao == 'bloquear':
@@ -189,7 +238,7 @@ def executar(argumento):
             registro.update(estado='entregue_para_revisao', bloqueio=None,
                             resultado=texto(dados.get('resultado'), 'resultado'))
         else:
-            raise ValueError('ação desconhecida: criar/status/registrar_etapa/bloquear/retomar/entregar')
+            raise ValueError('ação desconhecida: criar/status/inspecionar_etapa/registrar_etapa/bloquear/retomar/entregar')
         salvar(registro, sha)
     return json.dumps(registro, ensure_ascii=False)
 
