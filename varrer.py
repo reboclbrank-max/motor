@@ -18,6 +18,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 
 import comum as C
 import responder
@@ -46,16 +47,12 @@ def entrega_confirmada(numero, marca):
     return False
 
 
-MAX_POR_RODADA = int(os.environ.get("MAX_POR_RODADA", "3"))
-# JANELA: uma mensagem do dono sem resposta não pode envelhecer em silêncio. Era 72 h com 30
-# conversas por leitura; com 100 por página e uma semana de janela, o que ficou para trás é
-# pego na rodada seguinte em vez de desaparecer.
-JANELA_HORAS = int(os.environ.get("JANELA_HORAS", "168"))
-POR_PAGINA = int(os.environ.get("POR_PAGINA", "100"))
-# Cadeia: quando a rodada responde e SOBRA pendente, o próprio varredor acorda o chat de novo.
-# Sem isso, 15 pendentes com teto de 3 por rodada esperavam o próximo cron (que na prática roda
-# algumas vezes por dia, não a cada 10 min): resposta em horas em vez de minutos.
-MAX_CADEIA = int(os.environ.get("MAX_CADEIA", "8"))
+# Zero significa sem teto de quantidade; limite positivo é opção explícita de operação.
+MAX_POR_RODADA = int(os.environ.get("MAX_POR_RODADA", "0"))
+JANELA_HORAS = int(os.environ.get("JANELA_HORAS", "0"))
+POR_PAGINA = max(1, min(100, int(os.environ.get("POR_PAGINA", "100"))))
+# Handover antes do teto externo do job; não é cota diária de tarefas.
+ORCAMENTO_RODADA_S = float(os.environ.get("ORCAMENTO_RODADA_S", "480"))
 
 
 def log(*partes):
@@ -102,25 +99,27 @@ def pendentes(limite_dias=None, diagnostico=None):
     if diagnostico is not None:
         diagnostico.update({"ignoradas_do_robo": 0, "fora_da_janela": 0, "nao_do_dono": 0,
                             "ja_respondidas": 0})
-    # utcnow (naive) para comparar com o updated_at da API, que é naive depois do slice
-    desde = datetime.datetime.utcnow() - datetime.timedelta(
-        hours=JANELA_HORAS if limite_dias is None else limite_dias)
-    try:
-        issues = C.gh("GET", f"/repos/{C.REPO}/issues?state=open&sort=updated&direction=desc"
-                             f"&per_page={POR_PAGINA}")
-        if not isinstance(issues, list):
+    horas = JANELA_HORAS if limite_dias is None else limite_dias
+    desde = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=horas)
+             if horas and horas > 0 else None)
+    issues, pagina = [], 1
+    while True:
+        dados = C.gh("GET", f"/repos/{C.REPO}/issues?state=open&sort=updated&direction=desc"
+                          f"&per_page={POR_PAGINA}&page={pagina}")
+        if not isinstance(dados, list):
             raise RuntimeError("lista_de_conversas_invalida")
-    except Exception as e:
-        log(f"não consegui listar as conversas: {type(e).__name__}")
-        raise RuntimeError("conversas_nao_observaveis") from e
+        issues.extend(dados)
+        if len(dados) < POR_PAGINA:
+            break
+        pagina += 1
     achados = []
     for issue in issues:
         if issue.get("pull_request"):
             continue
         try:
             quando = issue.get("updated_at", "")
-            instante = datetime.datetime.fromisoformat(quando.replace("Z", "+00:00")).replace(tzinfo=None)
-            if instante < desde:
+            instante = datetime.datetime.fromisoformat(quando.replace("Z", "+00:00"))
+            if desde is not None and instante < desde:
                 if diagnostico is not None:
                     diagnostico["fora_da_janela"] += 1
                 continue
@@ -260,18 +259,27 @@ def main(processar_um=None, disparar=None):
     if not lista:
         log("nenhuma mensagem pendente do dono")
         return 0
-    log(f"{len(lista)} pendente(s) do dono; processando até {MAX_POR_RODADA}")
-    feitas = 0
-    for issue, comentario in lista[:MAX_POR_RODADA]:
+    limite = MAX_POR_RODADA if MAX_POR_RODADA > 0 else len(lista)
+    lote = lista[:limite]
+    log(f"{len(lista)} pendente(s); lote disponível: {len(lote)}")
+    feitas, tentadas = 0, 0
+    inicio = time.monotonic()
+    for issue, comentario in lote:
+        if tentadas and time.monotonic() - inicio >= ORCAMENTO_RODADA_S:
+            log("orçamento da execução atingido; pendências permanecem no canal")
+            break
+        tentadas += 1
         if processar_um(issue, comentario):
             feitas += 1
     restantes = len(lista) - feitas
-    log(f"respondidas {feitas} de {len(lista)}")
+    log(f"entregas confirmadas {feitas}; tentadas {tentadas}; pendentes {restantes}")
     if restantes > 0 and feitas > 0:
-        disparar(f"faltam {restantes}")
+        if not disparar(f"faltam {restantes}"):
+            return 2
     elif restantes > 0:
-        log(f"{restantes} seguem na fila: nenhuma resposta saiu nesta rodada, cadeia NÃO pedida")
-    return 1 if feitas < len(lista[:MAX_POR_RODADA]) else 0
+        log("sem progresso confirmado: não criar laço de execuções")
+    return 1 if feitas < tentadas else 0
+
 
 
 if __name__ == "__main__":
