@@ -115,6 +115,13 @@ class Retomada(unittest.TestCase):
         self.assertEqual(self.publicacoes, ['c1'])
         self.assertEqual(len(self.fila), 4)
 
+    def test_trabalho_incompleto_nao_bloqueia_outros_objetivos(self):
+        import trabalhos
+        with patch.object(trabalhos,'recuperar_da_origem',side_effect=[{'estado':'em_execucao'}]+[None]*4):
+            R.drenar_fila_respostas()
+        self.assertEqual(self.publicacoes,['c2','c3','c4','c5'])
+        self.assertEqual([i['marca'] for i in self.fila],['c1'])
+
     def test_motor_falhou_preserva_restantes(self):
         with patch.object(C, 'responder_com_ferramentas', side_effect=[('ok','M',[],None), (None,None,[],'falha')]):
             R.drenar_fila_respostas()

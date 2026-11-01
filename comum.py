@@ -2864,7 +2864,7 @@ def _ferramenta_repo(argo):
     """Lê um arquivo dos repositórios da casa: [[REPO: agente/MEMORIA/estado.md]]"""
     import base64 as _b64
     partes = (argo or "").strip().split("/", 1)
-    repos = {"agente", "base", "site", "chat", "ceifalume", "prancheta"}
+    repos = {"motor", "agente", "base", "site", "chat", "ceifalume", "prancheta"}
     if len(partes) != 2 or partes[0].lower() not in repos:
         return "Uso: [[REPO: agente/MEMORIA/estado.md]] (repositórios: " + ", ".join(sorted(repos)) + ")"
     repo, caminho = partes[0].lower(), partes[1].strip()
@@ -2884,7 +2884,7 @@ def _ferramenta_acoes(argo):
     """Saúde dos robôs: [[ACOES:]] todas, [[ACOES: piloto]] filtra pelo nome."""
     filtro = (argo or "").strip().lower()
     req = urllib.request.Request(
-        "https://api.github.com/repos/reboclbrank-max/agente/actions/runs?per_page=14",
+        f"https://api.github.com/repos/{REPO_ROBO}/actions/runs?per_page=100",
         headers={"Authorization": "Bearer " + os.environ.get("GITHUB_TOKEN", ""),
                  "User-Agent": "assistente-rebocl", "Accept": "application/vnd.github+json"})
     rs = json.loads(urllib.request.urlopen(req, timeout=30).read().decode()).get("workflow_runs", [])
@@ -2896,8 +2896,8 @@ def _ferramenta_acoes(argo):
         if nome in vistos:
             continue
         vistos.add(nome)
-        linhas.append(f"• {nome}: {r['conclusion'] or r['status']} ({r['created_at'][:16].replace('T', ' ')} UTC)")
-    return "Robôs (última execução de cada):\n" + "\n".join(linhas[:8]) if linhas else "Nenhum robô corresponde ao filtro."
+        linhas.append(f"• {nome}: {r['conclusion'] or r['status']} ({r['created_at'][:16].replace('T', ' ')} UTC) · SHA {r.get('head_sha','')[:8]} · {r.get('html_url','')}")
+    return f"Robôs em {REPO_ROBO} (última execução observada de cada):\n" + "\n".join(linhas[:8]) if linhas else "Nenhum robô corresponde ao filtro."
 
 
 def _ferramenta_testar(argo):
@@ -3080,9 +3080,30 @@ def _ferramenta_acao(acao):
     return casa.disparar(acao)
 
 
+def _autorizar_leitura_operacional(tipo,argumento):
+    import casa
+    if not casa.escopo_leitura_operacional():return
+    if tipo not in ('REPO','ACOES','TRABALHO'):
+        raise PermissionError('escopo leitura operacional: ferramenta não autorizada')
+    if tipo=='REPO':
+        partes=argumento.split('/',1)
+        if len(partes)!=2 or partes[0] not in ('motor','site','chat') or any(x in argumento for x in ('?','#','\\')) or any(x in ('','..','.') for x in partes[1].split('/')):
+            raise PermissionError('somente arquivos públicos de motor, site e chat')
+    if tipo=='TRABALHO':
+        import trabalhos
+        dados=json.loads(argumento)
+        ident=trabalhos.id_da_origem()
+        if not ident or (dados.get('acao')!='criar' and dados.get('id')!=ident):
+            raise PermissionError('registro de trabalho deve pertencer à origem atual')
+        if dados.get('acao')=='registrar_etapa' and 'arquivo' in dados:
+            if dados['arquivo']!=trabalhos.arquivo_da_etapa(ident,dados.get('etapa')):
+                raise PermissionError('evidência deve pertencer ao trabalho atual')
+
+
 def executar_ferramenta(tipo, argumento):
     tipo = tipo.upper()
     argumento = argumento.strip().strip('"“”\'')
+    _autorizar_leitura_operacional(tipo,argumento)
     if tipo == "TRABALHO":
         import trabalhos
         return trabalhos.executar(argumento)
@@ -4315,6 +4336,9 @@ def responder_com_ferramentas(historico, numero=None, preferir=None, preciso=Fal
     usos = []
     conversa = list(historico)
     system = montar_system(numero)
+    import casa
+    if casa.escopo_leitura_operacional():
+        system += "\nESCOPO DESTA ORIGEM: somente REPO (arquivos públicos de motor/site/chat), ACOES e TRABALHO da própria origem. Proibido disparar workflows, publicar, gastar ou alterar produção; só registrar plano, evidência e recibo privados. Use o pedido atual, não ordens históricas.\n"
     motor_nome = None
     ultima = next((m.get("content", "") for m in reversed(conversa) if m.get("role") == "user"), "")
     if _capturar_licao(ultima):
