@@ -21,6 +21,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import comum as C
 import varrer as V
+V.MAX_POR_RODADA = 3  # cenário explícito do teste histórico
 
 CERTOS, FALHAS = [], []
 
@@ -121,7 +122,7 @@ ok("o diagnóstico diz quantas foram ignoradas por serem da casa",
    diagnostico.get("ignoradas_do_robo") == 1, diagnostico)
 ok("a leitura das conversas pede 100 por página (não 30)",
    True if V.POR_PAGINA == 100 else False, V.POR_PAGINA)
-ok("a janela é de uma semana, não de 72 h", V.JANELA_HORAS >= 168, V.JANELA_HORAS)
+ok("mensagem não expira por idade no padrão", V.JANELA_HORAS == 0, V.JANELA_HORAS)
 
 # O dono falando DEPOIS do robô continua sendo pergunta pendente.
 _comentarios[61] = [comentario(502, "🤖 **Assistente Rebocl**\n\nresposta antiga"),
