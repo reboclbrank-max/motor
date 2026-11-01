@@ -4446,6 +4446,10 @@ def hash_pergunta(texto):
     return hashlib.sha256(norm.encode("utf-8")).hexdigest()[:16]
 
 
+def _cache_e_informativo(texto):
+    # Recibo/progresso pertence à origem; cache de texto nunca prova execução nova.
+    return not bool(re.search(r"recibo do trabalho|entregue para revis[aã]o|salvo em|MEMORIA/entregas|\b[0-9a-f]{32}\b|\[\[TRABALHO:",texto or '',re.I))
+
 def cache_exato(pergunta):
     """Resposta já guardada para a mesma pergunta (hash), ou None — sem motor nenhum."""
     try:
@@ -4455,7 +4459,7 @@ def cache_exato(pergunta):
             return None
         h = hash_pergunta(pergunta)
         for e in entradas:
-            if e.get("h") == h:
+            if e.get("h") == h and _cache_e_informativo(e.get("r")):
                 return (e.get("r") or "").strip() or None
     except Exception:
         pass
@@ -4650,7 +4654,7 @@ def registrar_resposta_cache(pergunta, resposta):
     try:
         pergunta = (pergunta or "").strip()
         resposta = (resposta or "").strip()
-        if len(pergunta) < 8 or not resposta:
+        if len(pergunta) < 8 or not resposta or not _cache_e_informativo(resposta):
             return False
         if resposta.startswith("🚦") or "nenhum motor" in resposta[:80]:
             return False  # respostas de falha NÃO envenenam o cache
@@ -4680,6 +4684,7 @@ def resposta_de_reserva(pergunta):
             return None
         bruto = ler_remoto(ARQ_RESPOSTAS, "[]")
         entradas = json.loads(bruto) if bruto else []
+        if isinstance(entradas,list):entradas=[e for e in entradas if isinstance(e,dict) and _cache_e_informativo(e.get("r"))]
         if not isinstance(entradas, list) or not entradas:
             return None
         pares = [(e.get("p") or "").strip() for e in entradas]

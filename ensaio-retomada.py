@@ -43,6 +43,16 @@ def filho(fase, numero):
     issue=conferir_issue(numero)
     Path('evento-ensaio.json').write_text(json.dumps({'action':'opened','issue':issue}))
     os.environ.update(GITHUB_EVENT_NAME='issues',GITHUB_EVENT_PATH=str(Path('evento-ensaio.json').resolve()),REFORCO_RELEVANCIA='0')
+    # Isola efeitos auxiliares de atendimento: não drena pedidos de usuários,
+    # não dispara avisos, nem ensina/cacheia dados fictícios na memória global.
+    C.ARQ_FILA_RESPOSTAS=f'MEMORIA/ensaios/retomada-{numero}/fila.json'
+    R.drenar_fila_respostas=lambda **kwargs: None
+    C.checar_avisos_rapido=lambda: {}
+    C.registrar_diario=lambda *args,**kwargs: True
+    C.registrar_conversa=lambda *args,**kwargs: True
+    C.registrar_placar=lambda *args,**kwargs: True
+    C.registrar_resposta_cache=lambda *args,**kwargs: False
+    with T.contexto_mensagem(numero,f'a{numero}',issue['body']):id_isolado=T.id_da_origem()
     C._capturar_licao=lambda texto: False  # não ensinar dados fictícios à memória real
     C._precisa_chao=lambda texto: False  # nenhum pedido de pesquisa externa no ensaio
     contagem={'modelo_chamadas':0,'ferramentas':0,'motores':[]}
@@ -56,11 +66,12 @@ def filho(fase, numero):
     C.chamar_llm=medido
     executar=C.executar_ferramenta
     def limitado(tipo, argumento):
+        if T.id_da_origem()!=id_isolado:return 'Origem fora do ensaio isolado; operação bloqueada.'
         if tipo!='TRABALHO':return 'Ensaio interno: use somente TRABALHO, sem efeitos externos.'
         dados=json.loads(argumento)
         if dados.get('acao')=='criar' and (not isinstance(dados.get('etapas'),list) or len(dados['etapas'])!=2):
             return 'O pedido exige exatamente DUAS etapas: analisar ocorrências e redigir relatório. Refaça a chamada criar; não crie metas de marketing.'
-        if dados.get('acao')!='criar' and dados.get('id')!=T.id_da_origem():
+        if dados.get('acao')!='criar' and dados.get('id')!=id_isolado:
             return 'Use somente o ID desta mensagem; não toque em outros trabalhos.'
         contagem['ferramentas']+=1;salvar();resultado=executar(tipo,argumento)
         if fase=='interromper' and dados.get('acao')=='registrar_etapa' and dados.get('etapa')==1:

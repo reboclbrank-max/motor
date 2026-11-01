@@ -20,4 +20,8 @@ class Ensaio(unittest.TestCase):
     def test_subprocesso_real_nao_mata_runner(self):
         s=Path(__file__).with_name('ensaio-retomada.py').read_text();self.assertIn('os._exit(23)',s)
         self.assertIn('capture_output=True',s);self.assertNotIn('print(proc.stdout',s)
+    def test_sem_atendimento_ou_aprendizado_de_fixture(self):
+        s=Path(__file__).with_name('ensaio-retomada.py').read_text()
+        for item in ['R.drenar_fila_respostas=lambda','C.checar_avisos_rapido=lambda','C.registrar_diario=lambda','C.registrar_resposta_cache=lambda','T.id_da_origem()!=id_isolado','MEMORIA/ensaios/retomada-']:
+            self.assertIn(item,s)
 if __name__=='__main__':unittest.main()
