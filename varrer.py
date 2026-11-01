@@ -129,7 +129,7 @@ def pendentes(limite_dias=None, diagnostico=None):
     achados = []
     revisao = revisao_historica()
     for issue in issues:
-        if issue.get("pull_request"):
+        if issue.get("pull_request") or (issue.get("body") or "").startswith("<!--ensaio-retomada:isolado-->"):
             continue
         try:
             quando = issue.get("updated_at", "")
