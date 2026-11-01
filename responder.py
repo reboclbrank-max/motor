@@ -83,12 +83,13 @@ def do_evento():
 def ja_respondida(numero, marca):
     """Verdadeiro quando a resposta para esta mensagem já existe (evita duplicatas)."""
     alvo = MARCA_ABERTURA + marca + "-->"
-    try:
-        comentarios = C.gh("GET", f"/repos/{C.REPO}/issues/{numero}/comments?per_page=100") or []
-    except Exception as e:
-        C.log(f"dedupe: não consegui conferir ({e})")
-        return False
-    return any(alvo in (c.get("body") or "") for c in comentarios)
+    comentarios = C.comentarios_da_conversa_verificados(numero)
+    return any(
+        (c.get("user") or {}).get("login") in (C.DONO_GITHUB, "github-actions[bot]")
+        and (c.get("body") or "").startswith(C.ASSINATURA)
+        and alvo in (c.get("body") or "")
+        for c in comentarios)
+
 
 
 def _parar_batida():
@@ -633,24 +634,35 @@ def modo_direto(texto):
 
 # ------------------------------------------------------------------ principal
 
-def drenar_fila_respostas():
-    """Se os motores voltaram, responde o que ficou na fila (máx 2 por execução)."""
+def drenar_fila_respostas(orcamento_s=180):
+    """Drena sem teto de contagem; confirma entrega e salva progresso por item.
+
+    O prazo é entre tarefas: não interrompe chamada de motor já iniciada e não
+    cria continuação automática nem transação entre GitHub e fila JSON.
+    """
+    inicio = time.monotonic()
     itens = C.fila_respostas_carregar()
-    if not itens:
-        return
     restantes = list(itens)
-    processadas = 0
+
+    def retirar(item):
+        novo = list(restantes)
+        novo.remove(item)
+        if not C.fila_respostas_salvar(novo):
+            raise RuntimeError("fila: checkpoint nao confirmado")
+        restantes[:] = novo
+
     for item in itens:
-        if processadas >= 2:
-            break
+        if time.monotonic() - inicio >= orcamento_s:
+            C.log("fila: prazo da rodada; pendências preservadas para próxima execução")
+            return
         numero_p = item.get("numero")
         texto_p = item.get("texto")
         marca_p = item.get("marca")
         if not (numero_p and texto_p and marca_p):
-            restantes.remove(item)
+            C.log("fila: item inválido preservado para revisão")
             continue
         if ja_respondida(numero_p, marca_p):
-            restantes.remove(item)  # já foi respondida por outro caminho
+            retirar(item)
             continue
         historico_p = C.historico_da_conversa(numero_p) + [{"role": "user", "content": texto_p}]
         resposta_p, motor_p, _usos_p, _erro_p = C.responder_com_ferramentas(historico_p, numero_p)
@@ -660,15 +672,14 @@ def drenar_fila_respostas():
         responder(numero_p, resposta_p, marca_p,
                   extra="chequei a fila e respondi agora que os motores voltaram "
                         f"(motor {motor_p or 'modo direto'})")
-        C.registrar_conversa(numero_p, texto_p, resposta_p, motor_p or "modo direto")
+        if not ja_respondida(numero_p, marca_p):
+            raise RuntimeError("fila: entrega nao confirmada; pendencia preservada")
+        retirar(item)
         try:
+            C.registrar_conversa(numero_p, texto_p, resposta_p, motor_p or "modo direto")
             C.registrar_resposta_cache(texto_p, resposta_p)
-        except Exception:
-            pass
-        restantes.remove(item)
-        processadas += 1
-    if len(restantes) != len(itens):
-        C.fila_respostas_salvar(restantes)
+        except Exception as e:
+            C.log(f"fila: entregue e salva; registro auxiliar falhou ({type(e).__name__})")
 
 
 def atalho_serve(pergunta, resposta, rotulo):

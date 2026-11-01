@@ -4182,8 +4182,24 @@ Quando o dono disser "me avise quando…", "quero ser avisado se…", "me lembra
 """
 
 
+def comentarios_da_conversa_verificados(numero):
+    """Todas as páginas em ordem; erro não equivale a conversa vazia."""
+    pagina, todos, anterior = 1, [], None
+    while True:
+        dados = gh("GET", f"/repos/{REPO}/issues/{numero}/comments?per_page=100&page={pagina}")
+        if not isinstance(dados, list):
+            raise RuntimeError("comentarios_nao_observaveis")
+        if dados and dados == anterior:
+            raise RuntimeError("paginacao_de_comentarios_sem_progresso")
+        todos.extend(dados)
+        if len(dados) < 100:
+            return todos
+        anterior = dados
+        pagina += 1
+
+
 def historico_da_conversa(numero, pular_id=None):
-    comentarios = gh("GET", f"/repos/{REPO}/issues/{numero}/comments?per_page=100") or []
+    comentarios = comentarios_da_conversa_verificados(numero)
     itens = []
     for c in comentarios:
         if pular_id is not None and c.get("id") == pular_id:
@@ -4192,7 +4208,8 @@ def historico_da_conversa(numero, pular_id=None):
         corpo = (c.get("body") or "").strip()
         if not corpo:
             continue
-        if autor == "github-actions[bot]":
+        if (autor == "github-actions[bot]" or
+                (autor == DONO_GITHUB and corpo.startswith(ASSINATURA))):
             corpo = remover_marcador(corpo)
             corpo = re.sub(r"^🤖 \*\*Assistente Rebocl\*\*\s*", "", corpo).strip()
             corpo = re.sub(r"\n\n---\n_\(.*?\)_$", "", corpo, flags=re.DOTALL).strip()
