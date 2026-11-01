@@ -81,6 +81,7 @@ jobs:
           python3 teste-entrega-verificada.py
           python3 teste-memoria-persistente.py
           python3 teste-fila-sem-expiracao.py
+          python3 teste-fila-por-mensagem.py
 
       - name: Baixar a memória do repositório privado
         env:
@@ -90,6 +91,7 @@ jobs:
 
       - name: Responder o que ficou pendente
         env:
+          FILA_EXIGE_REVISAO_HISTORICA: '1'
           GITHUB_TOKEN: ${{ secrets.PAT_MEMORIA }}
           PAT_MEMORIA: ${{ secrets.PAT_MEMORIA }}
           REPO_CONVERSAS: ${{ secrets.REPO_MEMORIA }}

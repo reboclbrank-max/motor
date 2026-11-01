@@ -107,7 +107,7 @@ ok("assinatura do assistente também é do robô",
 ok("mensagem de gente NÃO é tratada como robô",
    not V._do_robo("queria saber quantos jogos a casa tem publicados"))
 
-# Conversa em que a última fala é do robô (o caso medido) → não é pendência.
+# Fala do robô não vira tarefa; pergunta anterior sem marca permanece pendente.
 _issues = [issue(61, comentarios=5), issue(79, comentarios=1)]
 _comentarios = {
     61: [comentario(501, "pergunta de verdade"),
@@ -116,8 +116,8 @@ _comentarios = {
 }
 diagnostico = {}
 _lista, falso = com_fakes(_issues, _comentarios, lambda f: V.pendentes(diagnostico=diagnostico))
-ok("boletim/piloto no fim da conversa NÃO vira pendência",
-   [i["number"] for i, _c in _lista] == [79], [i["number"] for i, _c in _lista])
+ok("piloto não é tarefa e não apaga pergunta anterior sem resposta",
+   [c["id"] for _i, c in _lista] == [501, 503], [c["id"] for _i, c in _lista])
 ok("o diagnóstico diz quantas foram ignoradas por serem da casa",
    diagnostico.get("ignoradas_do_robo") == 1, diagnostico)
 ok("a leitura das conversas pede 100 por página (não 30)",
