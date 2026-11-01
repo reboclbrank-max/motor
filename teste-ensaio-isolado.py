@@ -24,4 +24,10 @@ class Ensaio(unittest.TestCase):
         s=Path(__file__).with_name('ensaio-retomada.py').read_text()
         for item in ['R.drenar_fila_respostas=lambda','C.checar_avisos_rapido=lambda','C.registrar_diario=lambda','C.registrar_resposta_cache=lambda','T.id_da_origem()!=id_isolado','MEMORIA/ensaios/retomada-']:
             self.assertIn(item,s)
+    def test_digest_do_pai_igual_ao_evento_real_canonico(self):
+        import hashlib
+        pedido=(E.MARCA+'\n'+E.PEDIDO).strip()
+        esperado=hashlib.sha256(pedido.encode()).hexdigest()
+        with patch.object(E.T,'recuperar_da_origem',side_effect=lambda:E.T._PEDIDO_SHA.get()):
+            self.assertEqual(E.registro(42),esperado)
 if __name__=='__main__':unittest.main()
