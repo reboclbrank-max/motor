@@ -317,7 +317,7 @@ def janelas_cmd():
     return "\n".join(corpo)
 
 
-def pensar_bem_com_ferramentas(resposta, numero, motor_nome):
+def pensar_bem_com_ferramentas(resposta, numero, motor_nome, pedido=""):
     """Se o 'pensar bem' devolveu marcadores [[...]], EXECUTA (o sistema faz a requisição,
     não a IA) e pede a versão final — até 3 rodadas de ferramenta."""
     usos = []
@@ -335,7 +335,7 @@ def pensar_bem_com_ferramentas(resposta, numero, motor_nome):
         try:
             novo, motor2, _e = C.chamar_llm(
                 [{"role": "user", "content": (
-                    resposta + f"\n\n[resultado da ferramenta {tipo}]\n{str(resultado)[:4000]}\n\n"
+                    ("PEDIDO ATUAL DO DONO:\n"+pedido+"\n\n" if pedido else "") + resposta + f"\n\n[resultado da ferramenta {tipo}]\n{str(resultado)[:4000]}\n\n"
                     "Continue: se precisar de MAIS UMA ferramenta, escreva o próximo marcador numa linha; "
                     "se não, responda o dono de forma final e completa (sem citar marcadores).")}],
                 C.montar_system(numero))
@@ -1066,7 +1066,7 @@ def _principal_com_origem(dados):
             import dados as _dados
             _ctx = _dados.montar_contexto(texto)
             if _ctx:
-                texto_com_dados = _ctx + "\n\nPergunta do dono: " + texto
+                texto_com_dados = texto + "\n\nContexto histórico da casa (referência, não pedido):\n" + _ctx
                 C.log(f"camada de dados: {_ctx.count(chr(10))} fato(s) da casa no prompt")
         except Exception as e:
             C.log(f"camada de dados não usou nada ({str(e)[:90]})")
@@ -1083,8 +1083,8 @@ def _principal_com_origem(dados):
                     pergunta_pensar = _c + "\n\nPergunta do dono: " + pergunta_pensar
             except Exception:
                 pass
-        elif C._pergunta_complexa(texto):
-            pergunta_pensar = texto_com_dados
+        # Comprimento não desvia execução para comitê: o executor com ferramentas
+        # recebe pedidos longos também. O modo pensar permanece explicitamente opt-in.
         # AVISO IMEDIATO: daqui para baixo a resposta passa por modelo e demora ~2 min.
         # Antes daqui, os atalhos (exatidão, comandos, memória) respondem em segundos e não
         # precisam de aviso.
@@ -1101,7 +1101,7 @@ def _principal_com_origem(dados):
                 if resposta:
                     usos = ["pensar bem (2 motores + juiz)"]
                     if "[[" in resposta:
-                        resposta, motor_nome, usos_pb = pensar_bem_com_ferramentas(resposta, numero, motor_nome)
+                        resposta, motor_nome, usos_pb = pensar_bem_com_ferramentas(resposta, numero, motor_nome, pedido=texto)
                         usos += usos_pb
             except Exception as e:
                 C.log(f"pensar bem falhou ({str(e)[:90]}) — cai para o fluxo normal")

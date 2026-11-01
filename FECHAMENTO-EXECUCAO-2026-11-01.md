@@ -1,0 +1,11 @@
+# Execução, escopo e segurança — 1 de novembro de 2026
+
+Primeiro ensaio real41288924627 não aprovado: foi persistido um objetivo sobre metas históricas em vez da triagem. Segundo ensaio7b851b3b9… reforçou o executor normal, mas a seleção automática por comprimento ainda desviava pedidos longos para dois motores+juiz. Nesse caminho, o juiz recebia somente os600 primeiros caracteres do contexto, perdendo o pedido do dono. Não foi editado plano remoto para fabricar aprovação.
+
+Correção: pedido vem antes dos dados; juiz recebe pergunta integral; follow-up de ferramentas mantém pedido; mensagem longa usa executor normal, enquanto pensar: permanece opt-in. O executor normal ancora o pedido depois das injeções históricas; preferir aceita ID/nome. Sete ferramentas já implementadas agora são reconhecidas pelo parser. O ensaio prefere Gemini configurado, depois Mistral, com cadeia real de reserva; não fornece respostas prontas. Até3 reentradas limitadas por fase não criam cron.
+
+ABRIR/VERIFICAR: proíbem credencial na URL, IPs não globais e destino DNS não verificável; cada redirecionamento é validado antes da próxima requisição. Bloqueio de redirect não encaminha o endereço ao leitor terceirizado. Ainda não é isolamento de rede contra todo DNS rebinding nem revisão de todos os clientes HTTP existentes. Leitura auxiliar continua podendo usar serviços externos; não é processamento inteiramente privado.
+
+Espelhos: autenticação via configuração Git efêmera no ambiente, nunca URL/argumento; erro não imprime argumentos/stderr; falha parcial retorna1. Não sincroniza espelhos como efeito do teste. Mesmo patch deve acompanhar o executor legado agente. Tokens existentes não foram trocados, ampliados ou expostos. O escopo real das credenciais do dono continua dependendo das configurações privadas.
+
+Ensaio isolado: modelo/API reais, Issue sintética privada fechada e ignorada pelo varredor, somente TRABALHO para ID da origem, sem publicar marketing. Interrompe processo filho depois da primeira evidência; outro job retoma por estado remoto; terceiro confere ausência de duplicação. Não equivale a queda real do runner nem capacidade universal. Resultados observados, testes e SHAs devem ser registrados na Base, inclusive falhas.

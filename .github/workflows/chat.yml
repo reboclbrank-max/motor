@@ -1,4 +1,5 @@
 name: chat (motor público)
+run-name: "Chat — pedido ${{ github.event.client_payload.pedido || 'varredura' }}"
 
 # Trabalhador do Assistente Rebocl rodando em repositório PÚBLICO.
 #
@@ -90,6 +91,8 @@ jobs:
           python3 teste-contexto-pedido.py
           python3 teste-ensaio-isolado.py
           python3 teste-pedido-atual.py
+          python3 teste-url-publica.py
+          python3 teste-espelho-seguro.py
 
       - name: Baixar a memória do repositório privado
         env:

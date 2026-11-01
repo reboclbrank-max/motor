@@ -49,7 +49,7 @@ def filho(fase, numero):
     def salvar():Path('contagem-ensaio.json').write_text(json.dumps(contagem))
     modelo=C.chamar_llm
     def medido(*args,**kwargs):
-        contagem['modelo_chamadas']+=1;salvar();kwargs['preferir']='mistral'
+        contagem['modelo_chamadas']+=1;salvar();kwargs['preferir']='gemini1' if any(p['id']=='gemini1' for p in C.montar_provedores()) else 'mistral'
         resposta=modelo(*args,**kwargs)
         if resposta[1]:contagem['motores'].append(resposta[1])
         salvar();return resposta
