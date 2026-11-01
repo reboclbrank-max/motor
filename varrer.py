@@ -41,8 +41,7 @@ def entrega_confirmada(numero, marca):
     for c in comentarios_verificados(numero):
         corpo = c.get("body") or ""
         autor = (c.get("user") or {}).get("login")
-        if (autor in (C.DONO_GITHUB, "github-actions[bot]")
-                and corpo.startswith(C.ASSINATURA) and alvo in corpo):
+        if C.comentario_e_resposta_final(c) and alvo in corpo:
             return True
     return False
 
@@ -150,8 +149,7 @@ def pendentes(limite_dias=None, diagnostico=None):
             log(f"conversa #{numero}: comentários ilegíveis ({type(e).__name__})")
             raise RuntimeError("comentarios_nao_observaveis") from e
         respondidas = {_marca_de(c.get("body")) for c in comentarios
-                       if (c.get("user") or {}).get("login") in (C.DONO_GITHUB, "github-actions[bot]")
-                       and (c.get("body") or "").startswith(C.ASSINATURA)}
+                       if C.comentario_e_resposta_final(c)}
         mensagens = [(f"a{numero}", issue, None)] + [
             (f"c{c.get('id')}", c, c) for c in comentarios]
         for marca, mensagem, comentario in mensagens:

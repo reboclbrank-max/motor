@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 """Testa a fila de respostas pendentes (v3.13): adicionar, dedupe, drenar, limites."""
 import json
+import base64
 import sys
 from pathlib import Path
 
@@ -10,7 +11,11 @@ import comum as C
 import responder as R
 
 store = {}
-C.ler_remoto = lambda caminho, padrao="": store.get(caminho, padrao)
+def fake_gh(metodo, caminho, corpo=None):
+    if C.ARQ_FILA_RESPOSTAS not in store:
+        raise RuntimeError("GitHub API → HTTP 404: ausente")
+    return {"content": base64.b64encode(store[C.ARQ_FILA_RESPOSTAS].encode()).decode()}
+C.gh = fake_gh
 
 
 def fake_escrever(caminho, conteudo, mensagem=""):
