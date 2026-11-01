@@ -43,7 +43,7 @@ jobs:
                    teste-varredura.py teste-relevancia.py teste-pensando.py teste-entrega-verificada.py teste-memoria-persistente.py teste-fila-sem-expiracao.py teste-fila-por-mensagem.py teste-retomada-fila.py teste-aviso-nao-conclusao.py teste-trabalhos.py teste-retomada-origem.py teste-sincronizacao-versao.py teste-contexto-pedido.py teste-ensaio-isolado.py teste-cache-operacional.py teste-pedido-atual.py teste-url-publica.py teste-espelho-seguro.py teste-candidatos-robustos.py teste-sentinela-fila-canonica.py; do
             if [ -f "$t" ]; then
               printf '\n=== %s ===\n' "$t"
-              python3 "$t" || falhas=$((falhas+1))
+              python3 rodar-contratos-offline.py "$t" || falhas=$((falhas+1))
             else
               printf '\n=== %s (ausente neste repositório) ===\n' "$t"
             fi

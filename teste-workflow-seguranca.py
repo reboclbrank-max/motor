@@ -267,6 +267,7 @@ checar("integração pública fica fora do laço offline",
        bloco_laco is not None and "teste-chat.py" not in bloco_laco.group(1)
        and "Integração pública somente-leitura (requer rede)" in testes
        and testes.count("python3 teste-chat.py") == 1)
+checar("CI isola cada suíte e bloqueia rede externa", 'python3 rodar-contratos-offline.py "$t"' in testes and "CONTRATO_REDE_EXTERNA_BLOQUEADA" in ler("rodar-contratos-offline.py"))
 checar("suíte não publica memória sintética nem recebe PAT",
        "sincronizar.py subir" not in testes and "secrets.PAT_MEMORIA" not in testes)
 for arquivo in ("teste-sincronizacao-versao.py", "teste-contexto-pedido.py"):
