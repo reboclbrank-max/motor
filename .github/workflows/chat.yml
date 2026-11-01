@@ -90,6 +90,7 @@ jobs:
           python3 teste-sincronizacao-versao.py
           python3 teste-contexto-pedido.py
           python3 teste-ensaio-isolado.py
+          python3 teste-cache-operacional.py
           python3 teste-pedido-atual.py
           python3 teste-url-publica.py
           python3 teste-espelho-seguro.py

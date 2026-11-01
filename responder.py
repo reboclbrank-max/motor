@@ -1272,7 +1272,8 @@ def _principal_com_origem(dados):
             registrar_tempo()
             C.registrar_conversa(numero, texto, resposta, motor_nome or "modo direto")
             try:
-                C.registrar_resposta_cache(texto, resposta)
+                if not resposta_falha and not usos and trabalho_atual is None:
+                    C.registrar_resposta_cache(texto, resposta)
             except Exception as e:
                 C.log(f"cache de respostas: {e}")
             if not resposta_falha:
