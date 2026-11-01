@@ -46,3 +46,8 @@ Configuração de apoio já aplicada no repositório: issues/wiki/projects desat
 
 `teste-casa.py` roda antes de qualquer resposta: 38 verificações offline que cercam número
 inventado, vazamento de credencial e publicação sem pedido explícito do dono.
+
+
+## Integridade da execução e retomada (01/11/2026)
+
+A sincronização passou a usar versão-base e recibo de conteúdo; divergência não sobrescreve outro escritor e falha parcial não é sucesso. O contexto do pedido acompanha cada tarefa/retomada/fila. Consulte [o contrato e os limites](docs/AUTONOMIA-INTEGRIDADE-2026-11-01.md). Isso é um corte de confiabilidade, não prova de autonomia geral ou garantia de recuperação de alterações somente locais após descarte do runner.

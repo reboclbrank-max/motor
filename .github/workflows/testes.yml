@@ -5,8 +5,8 @@ name: testes (a suíte inteira)
 # desde então. O repositório público tem minutos ilimitados, e a memória continua no privado
 # (baixada e devolvida por sincronizar.py com o PAT em secret).
 #
-# Roda as 14 suítes de teste da casa num lugar só. Antes elas só rodavam dentro do
-# privado, disputando a cota que já tinha acabado.
+# Regressões sem segredo no privado: laço offline e integração pública separada.
+# Testes não sincronizam memória sintética com a memória real.
 
 on:
   workflow_dispatch:
@@ -36,11 +36,11 @@ jobs:
       - name: Barreira offline (sem rede, sem segredo)
         run: |
           falhas=0
-          for t in teste-casa.py teste-chat.py teste-cerebro.py teste-orquestrador.py \
+          for t in teste-casa.py teste-cerebro.py teste-orquestrador.py \
                    teste-fila.py teste-estudo.py teste-palcos.py teste-piloto.py \
                    teste-semantica.py teste-caca.py teste-divulgacao.py teste-v37.py \
                    teste-responder-emergencia.py teste-vitrine.py teste-exatidao.py teste-confianca.py \
-                   teste-varredura.py teste-relevancia.py teste-pensando.py teste-entrega-verificada.py teste-memoria-persistente.py teste-fila-sem-expiracao.py teste-fila-por-mensagem.py teste-retomada-fila.py teste-aviso-nao-conclusao.py teste-trabalhos.py teste-retomada-origem.py; do
+                   teste-varredura.py teste-relevancia.py teste-pensando.py teste-entrega-verificada.py teste-memoria-persistente.py teste-fila-sem-expiracao.py teste-fila-por-mensagem.py teste-retomada-fila.py teste-aviso-nao-conclusao.py teste-trabalhos.py teste-retomada-origem.py teste-sincronizacao-versao.py teste-contexto-pedido.py; do
             if [ -f "$t" ]; then
               printf '\n=== %s ===\n' "$t"
               python3 "$t" || falhas=$((falhas+1))
@@ -52,9 +52,5 @@ jobs:
           echo "suítes com falha: $falhas"
           [ "$falhas" -eq 0 ] || exit 1
 
-      - name: Devolver o que aprendeu (memória)
-        if: always()
-        env:
-          PAT_MEMORIA: ${{ secrets.PAT_MEMORIA }}
-          REPO_MEMORIA: ${{ secrets.REPO_MEMORIA }}
-        run: python3 sincronizar.py subir
+      - name: Integração pública somente-leitura (requer rede)
+        run: python3 teste-chat.py

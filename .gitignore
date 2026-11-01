@@ -4,3 +4,7 @@ provas/
 __pycache__/
 .env
 *.token
+
+# Versões-base do runner, nunca conteúdo público
+.memoria-sync.json
+.sync-*

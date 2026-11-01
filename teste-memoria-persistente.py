@@ -23,9 +23,12 @@ class MemoriaPersistente(unittest.TestCase):
         if metodo=='GET':return {'sha':'sha-teste'}
         raise AssertionError(metodo)
     def sincronizar(self):
-        # Usa subir() REAL. A árvore/hash está simulada para obrigar comparação.
-        with patch.object(S,'listar_remoto',return_value={self.path:'hash-anterior'}),patch.object(S,'_http',side_effect=self.api):
+        # Usa subir() real e hashes reais dos bytes; a escrita direta já foi persistida.
+        antes = self.publicacoes
+        S._salvar_base({self.path:S._sha(self.antigo.encode())})
+        with patch.object(S,'listar_remoto',side_effect=lambda:{self.path:S._sha(self.remoto.encode())}),patch.object(S,'_http',side_effect=self.api):
             self.assertEqual(S.subir(),0)
+        self.assertEqual(self.publicacoes,antes, "não reenvia escrita já confirmada pela API")
     def test_escrita_nao_e_desfeita(self):
         with patch.object(C,'gh',side_effect=self.api):
             self.assertTrue(C.acrescentar_memoria(self.path,'- CODIGO-PERSISTENTE'))

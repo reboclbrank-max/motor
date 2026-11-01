@@ -29,7 +29,9 @@ def contexto_mensagem(numero, marca, pedido=None):
     token_sha = _PEDIDO_SHA.set(digest)
     token = _ORIGEM.set({'repositorio': C.REPO, 'conversa': numero, 'marca': marca})
     try:
-        yield
+        import casa
+        with casa.contexto_pedido(pedido):
+            yield
     finally:
         _ORIGEM.reset(token)
         _PEDIDO_SHA.reset(token_sha)
