@@ -85,6 +85,7 @@ jobs:
           python3 teste-retomada-fila.py
           python3 teste-aviso-nao-conclusao.py
           python3 teste-trabalhos.py
+          python3 teste-retomada-origem.py
 
       - name: Baixar a memória do repositório privado
         env:

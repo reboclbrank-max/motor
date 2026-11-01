@@ -684,7 +684,15 @@ def drenar_fila_respostas(orcamento_s=180):
             retirar(item)
             continue
         historico_p = C.historico_da_conversa(numero_p) + [{"role": "user", "content": texto_p}]
-        resposta_p, motor_p, _usos_p, _erro_p = C.responder_com_ferramentas(historico_p, numero_p)
+        import trabalhos
+        with trabalhos.contexto_mensagem(numero_p, marca_p, texto_p):
+            resposta_p, motor_p, _usos_p, _erro_p = C.responder_com_ferramentas(historico_p, numero_p)
+            trabalho_p = trabalhos.recuperar_da_origem()
+            if trabalho_p is not None:
+                if trabalho_p['estado'] != 'entregue_para_revisao':
+                    C.log('fila: trabalho incompleto preservado para retomada')
+                    return
+                resposta_p = trabalhos.recibo(trabalho_p['id'])
         if resposta_p is None:
             C.log("fila: motores ainda fora do ar — mantenho a fila para a próxima execução")
             return
@@ -730,7 +738,35 @@ def atalho_serve(pergunta, resposta, rotulo):
         return True
 
 
+def retomar_trabalho_da_mensagem(numero, texto, marca, registro):
+    import trabalhos
+    if registro['estado'] != 'entregue_para_revisao':
+        historico = C.historico_da_conversa(numero) + [{"role": "user", "content": texto}]
+        # montar_system injeta o estado observado da origem atual.
+        C.responder_com_ferramentas(historico, numero)
+        registro = trabalhos.recuperar_da_origem()
+    if registro['estado'] == 'entregue_para_revisao':
+        recibo = trabalhos.recibo(registro['id'])
+        responder(numero, 'Recuperei o trabalho desta mensagem.\n\n'+recibo, marca)
+        return 0
+    garantir_pendencia(numero, texto, marca)
+    responder(numero, f"O trabalho `{registro['id']}` continua em `{registro['estado']}`. "
+              "As etapas e evidências estão salvas. Ainda não confirmo a entrega; a mensagem permanece pendente.",
+              marca, pendente=True)
+    return 1
+
+
 def principal():
+    import trabalhos
+    dados = do_evento()
+    if not dados or not dados.get("numero"):
+        C.log("evento ignorado")
+        return 0
+    with trabalhos.contexto_mensagem(dados["numero"], dados["marca"], dados["texto"]):
+        return _principal_com_origem(dados)
+
+
+def _principal_com_origem(dados):
     t_inicio = time.time()
 
     def segundos():
@@ -747,10 +783,6 @@ def principal():
         except Exception as e:
             C.log(f"tempo: não consegui registrar ({e})")
 
-    dados = do_evento()
-    if not dados:
-        C.log("evento ignorado")
-        return 0
     numero, texto, marca, origem = dados["numero"], dados["texto"], dados["marca"], dados.get("origem", "?")
     C.log(f"origem: {origem} | conversa #{numero} | marca: {marca} | texto: {texto[:80]!r}")
     if not numero:
@@ -762,6 +794,11 @@ def principal():
         elif ja_respondida(numero, marca):
             C.log(f"já respondida (marca {marca}) — ignorando para não duplicar")
             return 0
+
+        import trabalhos
+        trabalho_anterior = trabalhos.recuperar_da_origem()
+        if trabalho_anterior is not None:
+            return retomar_trabalho_da_mensagem(numero, texto, marca, trabalho_anterior)
 
         baixo = texto.lower().strip()
 
@@ -1207,6 +1244,14 @@ def principal():
             if usos_extras:
                 usos = (usos or []) + usos_extras
             resposta, usos = garantir_memoria(texto, resposta, usos)
+            trabalho_atual = trabalhos.recuperar_da_origem()
+            if trabalho_atual is not None:
+                if trabalho_atual['estado'] != 'entregue_para_revisao':
+                    resposta_falha = True
+                    resposta = (f"Trabalho `{trabalho_atual['id']}` salvo em `{trabalho_atual['estado']}`, "
+                                "mas ainda não entregue. Etapas e evidências preservadas para a próxima tentativa.")
+                else:
+                    usos = list(dict.fromkeys((usos or []) + ["recibo-trabalho:"+trabalho_atual['id']]))
             resposta = C.anexar_recibos_trabalho(resposta, usos)
             _rotulo_motor = motor_nome or 'modo direto, sem motor'
             try:

@@ -7,9 +7,65 @@ import base64
 import json
 import re
 import uuid
+import hashlib
+from contextvars import ContextVar
+from contextlib import contextmanager
 import comum as C
 
 PASTA = 'MEMORIA/trabalhos'
+
+
+_ORIGEM = ContextVar('origem_do_trabalho', default=None)
+_PEDIDO_SHA = ContextVar('sha_do_pedido', default=None)
+
+
+@contextmanager
+def contexto_mensagem(numero, marca, pedido=None):
+    if type(numero) is not int or numero <= 0 or not isinstance(marca, str) or not re.fullmatch(r'[ac][0-9]+', marca):
+        raise ValueError('origem de mensagem inválida')
+    if pedido is not None and not isinstance(pedido, str):
+        raise ValueError('pedido inválido')
+    digest = hashlib.sha256(pedido.encode()).hexdigest() if pedido is not None else None
+    token_sha = _PEDIDO_SHA.set(digest)
+    token = _ORIGEM.set({'repositorio': C.REPO, 'conversa': numero, 'marca': marca})
+    try:
+        yield
+    finally:
+        _ORIGEM.reset(token)
+        _PEDIDO_SHA.reset(token_sha)
+
+
+def id_da_origem():
+    origem = _ORIGEM.get()
+    if origem is None:
+        return None
+    return hashlib.sha256(json.dumps(origem, sort_keys=True).encode()).hexdigest()[:32]
+
+
+def recuperar_da_origem():
+    ident = id_da_origem()
+    if ident is None:
+        return None
+    try:
+        registro, _ = carregar(ident)
+    except RuntimeError as e:
+        if re.search(r'HTTP 404(?:\D|$)', str(e)):
+            return None
+        raise
+    if registro.get('origem') != _ORIGEM.get():
+        raise ValueError('origem do registro não confere; não reutilizar')
+    if _PEDIDO_SHA.get() is not None and registro.get('pedido_sha256') != _PEDIDO_SHA.get():
+        raise ValueError('mensagem alterada: revisar plano antes de continuar')
+    return registro
+
+
+def instrucoes_da_origem():
+    registro = recuperar_da_origem()
+    if registro is None:
+        return ''
+    return ('Há trabalho persistido para ESTA mensagem. Não crie cópia nem refaça etapas com evidência. '
+            'Use o ID abaixo, execute somente etapas pendentes e entregue quando terminar. '
+            'Não invente execução ou conclusão. Estado observado: '+json.dumps(registro, ensure_ascii=False))
 
 
 def caminho(identificador):
@@ -76,14 +132,20 @@ def executar(argumento):
         raise ValueError('TRABALHO precisa de objeto JSON')
     acao = dados.get('acao')
     if acao == 'criar':
+        existente = recuperar_da_origem()
+        if existente is not None:
+            return json.dumps(existente, ensure_ascii=False)
         objetivo = texto(dados.get('objetivo'), 'objetivo')
         etapas = dados.get('etapas')
         if not isinstance(etapas, list) or not etapas:
             raise ValueError('planeje ao menos uma etapa antes de criar')
-        registro = {'versao': 1, 'id': uuid.uuid4().hex, 'objetivo': objetivo,
+        registro = {'versao': 1, 'id': id_da_origem() or uuid.uuid4().hex, 'objetivo': objetivo,
                     'estado': 'planejado', 'criado_em': C.agora().isoformat(timespec='seconds'),
                     'etapas': [{'numero': i+1, 'descricao': texto(e, 'etapa'), 'estado': 'pendente'}
                                for i, e in enumerate(etapas)], 'bloqueio': None}
+        if _ORIGEM.get() is not None:
+            registro['origem'] = dict(_ORIGEM.get())
+            registro['pedido_sha256'] = _PEDIDO_SHA.get()
         salvar(registro)
     else:
         registro, sha = carregar(dados.get('id'))

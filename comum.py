@@ -4075,6 +4075,8 @@ def montar_system(numero=None):
             estado_medido = "ainda não medido nesta máquina — escreva [[CASA:]] antes de falar de números"
     except Exception as e:
         estado_medido = f"indisponível ({type(e).__name__}) — escreva [[CASA:]] antes de falar de números"
+    import trabalhos
+    retomada_trabalho = trabalhos.instrucoes_da_origem()
     agora_local = datetime.now(ZoneInfo(FUSO_PADRAO)) if ZoneInfo else agora()
     return f"""Você é o "Assistente Rebocl" — a IA própria da empresa Rebocl Brank (dono: desenvolvedor solo de jogos no Brasil). Hoje é {agora_local.strftime('%d/%m/%Y %H:%M')} (horário de {FUSO_PADRAO}).
 
@@ -4086,6 +4088,9 @@ Fale SEMPRE português do Brasil — mesmo se o dono escrever em outra língua. 
 ## Números medidos da casa (última leitura real — use ESTES números, não invente)
 {estado_medido}
 - REGRA: se a pergunta for sobre resultado, alcance, seguidores, downloads, inscritos ou metas e estes números estiverem velhos ou vazios, escreva [[CASA:]] e PARE em vez de estimar. `NAO_OBSERVAVEL` significa "não foi medido" — nunca "zero".
+
+## Trabalho desta mensagem (registro observado)
+{retomada_trabalho}
 
 ## Suas ferramentas (escreva o marcador numa linha; o sistema executa e devolve o resultado)
 - REGRA DE OURO: para ler página, buscar, ver clima/cotação/foto — NUNCA escreva script ou curl e NUNCA diga que não consegue acessar: apenas ESCREVA o marcador [[...]] numa linha e PARE. O sistema executa por você e devolve o resultado na mensagem seguinte.

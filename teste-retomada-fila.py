@@ -63,7 +63,8 @@ class Retomada(unittest.TestCase):
         def publicar(n, t, m, **kw):
             self.publicacoes.append(m)
             self.entregues.add(m)
-        funcs = [patch.object(C, 'fila_respostas_carregar', lambda: copy.deepcopy(self.fila)),
+        funcs = [patch.object(C, 'gh', side_effect=RuntimeError('HTTP 404')),
+                 patch.object(C, 'fila_respostas_carregar', lambda: copy.deepcopy(self.fila)),
                  patch.object(C, 'fila_respostas_salvar', salvar),
                  patch.object(R, 'ja_respondida', lambda n, m: m in self.entregues),
                  patch.object(R, 'responder', publicar),
