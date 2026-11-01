@@ -1,0 +1,7 @@
+# Ensaio interno isolado de retomada
+
+Pedido explícito do dono: fechar o ciclo real, não entregar apenas cortes intermediários. Workflow manual exclusivo do dono, três jobs em runners distintos: iniciar e interromper processo após checkpoint real da primeira etapa; retomar o mesmo trabalho; confirmar recibo e reentrada sem modelo/ferramentas/resposta duplicados. Falha esperada23 ocorre em processo filho com os._exit, não cancela produção nem simula queda da infraestrutura do GitHub.
+
+Modelo real (preferência Mistral, cadeia de reserva configurada), API e persistência GitHub reais. Issue privada sintética, marcada desde a criação e fechada antes do modelo; o varredor ignora essa marca para não disputar o ensaio. Só ferramenta TRABALHO e ID da mensagem; bloqueadas ações externas no harness, sem mudar a política de produção. Aprendizado automático e pesquisa desativados no ensaio para não ensinar dados fictícios nem buscar internet. Não é prova de navegação, e-mail ou entrada via UI.
+
+Não modifica conteúdo de entrega manualmente: textos e chamadas de planejamento/etapas/entrega são do modelo. No job posterior, recarrega pela origem e verifica SHA da primeira etapa, dois arquivos, um recibo e um trabalho. Logs brutos do subprocesso não são publicados; prints só contadores e verificações. Nenhum cron, canal, conta, gasto ou marketing novo. Não dá autonomia universal nem qualidade automaticamente. Resultado observado e SHAs ficam na Base; a existência deste código não prova que passou.

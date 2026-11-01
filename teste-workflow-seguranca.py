@@ -17,6 +17,7 @@ SETUP_PYTHON = "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # 
 # Orçamento deliberado do estado atual: toda ampliação de escopo precisa ser
 # revisada junto do contrato, em vez de aparecer silenciosamente em um YAML.
 PERMISSOES_ESPERADAS = {
+    "ensaio-retomada.yml": {"contents": "read"},
     # Orçamento do repositório PÚBLICO (motor). Todos leem o código e escrevem na memória
     # do privado pela API, com o PAT em secret — nenhum precisa de escrita aqui.
     # Ampliar qualquer um destes exige revisar este contrato de propósito, não por descuido.

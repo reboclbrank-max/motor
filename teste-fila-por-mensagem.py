@@ -37,6 +37,10 @@ class FilaMensagem(unittest.TestCase):
     def test_registro_obrigatorio_ausente_falha(self):
         with patch.dict(os.environ,{'FILA_EXIGE_REVISAO_HISTORICA':'1'}),patch.object(V.os.path,'isfile',return_value=False):
             with self.assertRaises(RuntimeError):V.revisao_historica()
+    def test_ensaio_marcado_nao_disputa_worker(self):
+        self.i["body"]="<!--ensaio-retomada:isolado-->\nteste"
+        with patch.object(V.C,"gh",return_value=[self.i]),patch.object(V,"revisao_historica",return_value=set()):
+            self.assertEqual(V.pendentes(),[])
     def test_ordenacao_cronologica(self):
         self.assertEqual(self.marcas(self.fila([self.c(2),self.c(1)])),['a42','c1','c2'])
 
