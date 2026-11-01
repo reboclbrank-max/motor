@@ -78,10 +78,14 @@ R.drenar_fila_respostas()
 check("máx 2 por execução", len(publicados) == 2)
 check("restaram 3 na fila", len(C.fila_respostas_carregar()) == 3)
 
-# ---- corte MAX_FILA_RESPOSTAS ----
+# ---- nenhum pedido descartado por quantidade ----
 for i in range(40):
     C.fila_respostas_adicionar(100 + i, f"q{i}", f"m{i}")
-check("corte em MAX_FILA_RESPOSTAS", len(C.fila_respostas_carregar()) <= C.MAX_FILA_RESPOSTAS)
+check("preserva todos os 43 pedidos pendentes", len(C.fila_respostas_carregar()) == 43)
+check("preserva a pendência anterior ao lote de 40", C.fila_respostas_carregar()[0]["marca"] == "c302")
+texto_longo = "X" * 12000
+C.fila_respostas_adicionar(999, texto_longo, "longo999")
+check("texto longo não é cortado ao enfileirar", C.fila_respostas_carregar()[-1]["texto"] == texto_longo)
 
 print("\nTESTE FILA DE RESPOSTAS:", "TUDO OK ✓" if ok else "FALHOU ✗")
 sys.exit(0 if ok else 1)

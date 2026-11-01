@@ -160,9 +160,9 @@ MAX_RESPOSTAS_CACHE = 400
 ARQ_PLACAR = "MEMORIA/placar-motores.json"  # orquestrador: nota por motor+categoria (v3.9)
 ARQ_PILOTO_TXT = "MEMORIA/PILOTO.txt"  # piloto automático: existir = ligado (v3.10)
 ARQ_FILA_RESPOSTAS = "MEMORIA/fila-respostas.json"  # perguntas que ficaram sem motor (v3.13)
-MAX_FILA_RESPOSTAS = 30
+MAX_FILA_RESPOSTAS = 0  # compatibilidade: zero = sem descarte por quantidade
 ARQ_FILA_RESPOSTAS = "MEMORIA/fila-respostas.json"  # perguntas que ficaram sem motor (v3.13)
-MAX_FILA_RESPOSTAS = 30
+MAX_FILA_RESPOSTAS = 0  # compatibilidade: zero = sem descarte por quantidade
 ARQ_DIAG = "MEMORIA/diagnostico.json"
 ARQ_BANCO = "MEMORIA/banco.json"
 ARQ_CACHE = "MEMORIA/cache-buscas.json"
@@ -4514,7 +4514,7 @@ def fila_respostas_carregar():
 
 def fila_respostas_salvar(itens):
     return escrever_remoto(ARQ_FILA_RESPOSTAS,
-                           json.dumps(itens[-MAX_FILA_RESPOSTAS:], ensure_ascii=False, indent=1),
+                           json.dumps(itens, ensure_ascii=False, indent=1),
                            "fila de respostas pendentes")
 
 
@@ -4522,7 +4522,7 @@ def fila_respostas_adicionar(numero, texto, marca):
     itens = fila_respostas_carregar()
     if any(i.get("marca") == marca for i in itens):
         return False  # já está na fila
-    itens.append({"numero": numero, "texto": (texto or "")[:4000], "marca": marca,
+    itens.append({"numero": numero, "texto": (texto or ""), "marca": marca,
                   "em": agora().isoformat(timespec="seconds")})
     return fila_respostas_salvar(itens)
 
@@ -4541,7 +4541,7 @@ def fila_respostas_carregar():
 
 def fila_respostas_salvar(itens):
     return escrever_remoto(ARQ_FILA_RESPOSTAS,
-                           json.dumps(itens[-MAX_FILA_RESPOSTAS:], ensure_ascii=False, indent=1),
+                           json.dumps(itens, ensure_ascii=False, indent=1),
                            "fila de respostas pendentes")
 
 
@@ -4549,7 +4549,7 @@ def fila_respostas_adicionar(numero, texto, marca):
     itens = fila_respostas_carregar()
     if any(i.get("marca") == marca for i in itens):
         return False  # já está na fila
-    itens.append({"numero": numero, "texto": (texto or "")[:4000], "marca": marca,
+    itens.append({"numero": numero, "texto": (texto or ""), "marca": marca,
                   "em": agora().isoformat(timespec="seconds")})
     return fila_respostas_salvar(itens)
 
