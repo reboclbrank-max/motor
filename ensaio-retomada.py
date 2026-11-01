@@ -28,7 +28,7 @@ Só use a ferramenta TRABALHO neste ensaio. O resultado esperado são DOIS arqui
 
 
 def registro(numero):
-    with T.contexto_mensagem(numero, f'a{numero}', MARCA+'\n'+PEDIDO):
+    with T.contexto_mensagem(numero, f'a{numero}', (MARCA+'\n'+PEDIDO).strip()):
         return T.recuperar_da_origem()
 
 
