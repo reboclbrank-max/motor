@@ -19,3 +19,5 @@ Corrigido também o produtor de candidatos: novo registro tem nome/tipo/timeout;
 Sem novos crons, contas, serviços contratados ou disparos de marketing.
 
 As barreiras Python dos workflows foram ligadas ao executor isolado já existente: cópia descartável, sem segredos herdados nem TCP externo. A integração pública teste-chat.py continua separada. Fixtures de teste não devem chegar ao checkout que depois baixa/devolve memória privada. Nenhum cron ou gatilho foi criado por essa troca.
+
+Correção verificada na revisão de aceite: restrições negativas não escolhem alvos ou fontes; pedido de status/execuções exige dados de Actions, não só texto de YAML. Quando o objetivo pede YAML e status, ambos são coletados. A primeira prova natural100 foi preservada mas rejeitada por fonte insuficiente; não deve ser contada como aceite do objetivo.

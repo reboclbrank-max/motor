@@ -14,6 +14,14 @@ class Intencao(unittest.TestCase):
  def test_status_executor(self):
   self.assertEqual(I.classificar('Como está o Chat da casa?')['fontes_minimas'],[['ACOES','chat']])
   self.assertEqual(I.classificar('Pode conferir a operação?')['fontes_minimas'],[['ACOES','chat']])
+ def test_restricao_nao_escolhe_fonte_e_status_nao_vira_yaml(self):
+  p='Confira a operação do Chat da casa e gere um relatório das execuções observadas, com status e SHA. Sem executar outros workflows.'
+  self.assertEqual(I.classificar(p)['fontes_minimas'],[['ACOES','chat']])
+  p='Confira a operação do Chat sem conferir barreiras do Site.'
+  self.assertEqual(I.classificar(p)['fontes_minimas'],[['ACOES','chat']])
+ def test_pedido_status_e_yaml_coleta_ambos_e_preserva_caixa_de_caminho(self):
+  self.assertEqual(I.classificar('Confira os workflows do Chat e o status das execuções')['fontes_minimas'],[['REPO','motor/.github/workflows/chat.yml'],['ACOES','chat']])
+  self.assertEqual(I.classificar('Leia motor/README.md, sem publicar.')['fontes_minimas'],[['REPO','motor/README.md']])
  def test_casos_ambiguos_ou_fora_do_dominio_nao_sao_roteados(self):
   for pedido in ['Oi, tudo bem?','Termine tudo','Verifique o motor do carro','Analise o site https://example.org','Mostre esse chat','"Confira a operação"','> Confira a operação','Não confira a operação; publique']:
    with self.subTest(pedido=pedido):self.assertIsNone(I.classificar(pedido))
