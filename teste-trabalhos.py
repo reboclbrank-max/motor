@@ -105,6 +105,28 @@ class Trabalhos(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.chamar(acao='criar', objetivo='teste', etapas=[])
 
+    def test_modelo_pode_produzir_arquivo_sem_precriacao_humana(self):
+        r = self.criar()
+        r = self.chamar(acao='registrar_etapa', id=r['id'], etapa=1, conteudo='Resultado produzido pelo modelo')
+        ev = r['etapas'][0]['evidencia']
+        self.assertIn('trabalho-'+r['id'], ev['arquivo'])
+        self.assertEqual(base64.b64decode(self.store[ev['arquivo']]['content']).decode(), 'Resultado produzido pelo modelo\n')
+
+    def test_arquivo_preexistente_diferente_nao_e_sobrescrito(self):
+        r = self.criar()
+        path = f'MEMORIA/entregas/trabalho-{r["id"]}/etapa-1.md'
+        self.evidencia(path=path, body='prova anterior', sha='blob-anterior')
+        with self.assertRaisesRegex(ValueError, 'diverge'):
+            self.chamar(acao='registrar_etapa', id=r['id'], etapa=1, conteudo='alterar prova')
+        self.assertEqual(self.store[path]['sha'], 'blob-anterior')
+
+    def test_reentrada_apos_arquivo_antes_checkpoint_aceita_mesmo_conteudo(self):
+        r = self.criar()
+        path = T.gravar_entrega(r['id'], 1, 'conteúdo estável')
+        sha = self.store[path]['sha']
+        r = self.chamar(acao='registrar_etapa', id=r['id'], etapa=1, conteudo='conteúdo estável')
+        self.assertEqual(r['etapas'][0]['evidencia']['sha_blob'], sha)
+
     def test_marcador_e_roteador_estao_ligados(self):
         dado = json.dumps({'acao':'criar', 'objetivo':'teste', 'etapas':['validar']})
         achado = C.RE_FERRAMENTA.search('[[TRABALHO: '+dado+']]')
