@@ -167,7 +167,7 @@ def pendentes(limite_dias=None, diagnostico=None):
             if comentario is None and comentarios and not (mensagem.get("body") or "").strip():
                 continue  # abertura vazia não acrescenta pedido ao histórico já existente
             import operacao_leitura as O
-            if marca in respondidas and (numero,marca) not in revisao and (mensagem.get("body") or "").lstrip().startswith(O.PREFIXO):
+            if marca in respondidas and (numero,marca) not in revisao and O.eh_operacional(mensagem.get("body")):
                 if not any(C.comentario_e_resposta_final(c) and O.marcador(marca) in (c.get("body") or "") and ("<!--resp:"+marca+"-->") in (c.get("body") or "") for c in comentarios):
                     achados.append((issue,comentario))
                     continue  # resposta anterior sem comprovacao nao satisfaz o aceite
@@ -217,7 +217,7 @@ def _processar(issue, comentario):
         os.environ["GITHUB_EVENT_PATH"] = _evento_falso(issue)
     try:
         import operacao_leitura as O
-        operacional=((comentario or issue).get("body") or "").lstrip().startswith(O.PREFIXO)
+        operacional=O.eh_operacional((comentario or issue).get("body"))
         marca = f"c{comentario.get('id')}" if comentario else f"a{numero}"
         if (entrega_confirmada(numero, marca, True) if operacional else entrega_confirmada(numero, marca)):
             return True

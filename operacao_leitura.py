@@ -6,6 +6,7 @@ import comum as C
 import trabalhos as T
 EXECUTOR='leitura-operacional-v1'
 PREFIXO='<!--escopo:leitura-operacional-->'
+def eh_operacional(pedido):return str(pedido or '').lstrip().startswith((PREFIXO,'<!--escopo:planejamento-operacional-->'))
 def marcador(marca):return f'<!--entrega-operacional-verificada:{marca}-->'
 def sha(b):return hashlib.sha1(f'blob {len(b)}\0'.encode()+b).hexdigest()
 def ler_opcional(path):
@@ -60,8 +61,13 @@ def coletar(fontes):
    resultados.append({'tipo':tipo,'argumento':arg,'fonte':url,'head':head,'sha_blob':d['sha'],'relatorio':rel})
  return resultados
 
-def executar(pedido):
- fontes=fontes_do_pedido(pedido);ident=T.id_da_origem()
+def executar(pedido,fontes_planejadas=None):
+ if fontes_planejadas is not None:
+  import planejamento_operacional as P
+  if not pedido.lstrip().startswith(P.PREFIXO):raise ValueError("plano exige escopo próprio")
+  fontes=P.validar_fontes(fontes_planejadas)
+ else:fontes=fontes_do_pedido(pedido)
+ ident=T.id_da_origem()
  if not ident:raise ValueError('origem obrigatoria')
  registro=T.recuperar_da_origem()
  if registro and registro.get('executor')==EXECUTOR:
@@ -73,6 +79,8 @@ def executar(pedido):
   rel='# Conferência operacional verificada\n\nObjetivo: '+objetivo+'\n\nObservado em: '+C.agora().isoformat()+'\n\n'
   for d in dados:rel+='## '+d['tipo']+': '+d['argumento']+'\n\nFonte: '+d['fonte']+'\n\n'+d['relatorio']+'\n\n'
   rel+='## Limites\n\nSomente leitura de produção; nenhum workflow foi disparado pelo executor desta tarefa. Nenhuma publicação, email ou gasto foi efetuado por este executor. Status de job não comprova conclusão de tarefa; em andamento não significa sucesso. Arquivos e recibo são privados. Análise determinística de fontes observadas, sem chamada de LLM; não é aprovação humana nem garantia de autonomia geral.\n'
+  if fontes_planejadas is not None:
+   rel+='\n## Planejamento\n\nFontes propostas por modelo, validadas pelo controlador e executadas sem ferramenta de escrita em produção. Plano privado: MEMORIA/planos-operacionais/'+ident+'.json. A validação estrutural não garante que o modelo escolheu todas as fontes adequadas ao objetivo; relatório entregue para revisão. A ausência de LLM citada acima refere-se à coleta/análise determinística, não à proposta do plano.\n'
   ev=imutavel(f'MEMORIA/operacao-leitura/{ident}/{hashlib.sha256(rel.encode()).hexdigest()}.md',rel)
   arquivo=T.caminho(ident);info=ler_opcional(arquivo);anterior_sha=info['sha'] if info else None
   if registro:

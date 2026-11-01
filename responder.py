@@ -692,7 +692,7 @@ def drenar_fila_respostas(orcamento_s=180):
             C.log("fila: origem histórica/ensaio preservada para revisão, sem executar")
             continue
         import operacao_leitura as O
-        if str(texto_p).lstrip().startswith(O.PREFIXO):
+        if O.eh_operacional(texto_p):
             import trabalhos
             with trabalhos.contexto_mensagem(numero_p,marca_p,texto_p):
                 if responder_operacao_leitura(numero_p,texto_p,marca_p)==0:
@@ -777,7 +777,8 @@ def retomar_trabalho_da_mensagem(numero, texto, marca, registro):
 def responder_operacao_leitura(numero,texto,marca):
     import operacao_leitura as O
     try:
-        recibo=O.executar(texto)
+        import planejamento_operacional as P
+        recibo=P.executar(texto) if texto.lstrip().startswith(P.PREFIXO) else O.executar(texto)
         resposta="Conferência operacional concluída com fontes reais. Uma resposta anterior sem este recibo não comprovava a entrega.\n\n"+recibo+"\n\n"+O.marcador(marca)
         if not ja_respondida(numero,marca):responder(numero,resposta,marca)
         if not ja_respondida(numero,marca):raise RuntimeError('entrega nao confirmada')
