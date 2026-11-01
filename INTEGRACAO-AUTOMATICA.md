@@ -17,3 +17,5 @@ Corrigido também o produtor de candidatos: novo registro tem nome/tipo/timeout;
 - Garantia de executar corretamente qualquer objetivo, com qualquer modelo/plataforma, não é uma propriedade alcançável por esta alteração. Planejamento livre permanece sujeito a erro. Fontes observadas e limites ficam explícitos, não são trocados por promessa de autonomia total.
 
 Sem novos crons, contas, serviços contratados ou disparos de marketing.
+
+As barreiras Python dos workflows foram ligadas ao executor isolado já existente: cópia descartável, sem segredos herdados nem TCP externo. A integração pública teste-chat.py continua separada. Fixtures de teste não devem chegar ao checkout que depois baixa/devolve memória privada. Nenhum cron ou gatilho foi criado por essa troca.

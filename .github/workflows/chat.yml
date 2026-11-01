@@ -78,28 +78,28 @@ jobs:
 
       - name: Barreira offline (sem rede, sem segredo)
         run: |
-          python3 teste-casa.py
-          python3 teste-entrega-verificada.py
-          python3 teste-memoria-persistente.py
-          python3 teste-fila-sem-expiracao.py
-          python3 teste-fila-por-mensagem.py
-          python3 teste-retomada-fila.py
-          python3 teste-aviso-nao-conclusao.py
-          python3 teste-trabalhos.py
-          python3 teste-retomada-origem.py
-          python3 teste-sincronizacao-versao.py
-          python3 teste-contexto-pedido.py
-          python3 teste-ensaio-isolado.py
-          python3 teste-cache-operacional.py
-          python3 teste-pedido-atual.py
-          python3 teste-url-publica.py
-          python3 teste-espelho-seguro.py
-          python3 teste-candidatos-robustos.py
-          python3 teste-sentinela-fila-canonica.py
-          python3 teste-operacao-leitura.py
-          python3 teste-planejamento-operacional.py
-          python3 teste-intencao-operacional.py
-          python3 teste-autorizacao-efeitos.py
+          python3 rodar-contratos-offline.py teste-casa.py
+          python3 rodar-contratos-offline.py teste-entrega-verificada.py
+          python3 rodar-contratos-offline.py teste-memoria-persistente.py
+          python3 rodar-contratos-offline.py teste-fila-sem-expiracao.py
+          python3 rodar-contratos-offline.py teste-fila-por-mensagem.py
+          python3 rodar-contratos-offline.py teste-retomada-fila.py
+          python3 rodar-contratos-offline.py teste-aviso-nao-conclusao.py
+          python3 rodar-contratos-offline.py teste-trabalhos.py
+          python3 rodar-contratos-offline.py teste-retomada-origem.py
+          python3 rodar-contratos-offline.py teste-sincronizacao-versao.py
+          python3 rodar-contratos-offline.py teste-contexto-pedido.py
+          python3 rodar-contratos-offline.py teste-ensaio-isolado.py
+          python3 rodar-contratos-offline.py teste-cache-operacional.py
+          python3 rodar-contratos-offline.py teste-pedido-atual.py
+          python3 rodar-contratos-offline.py teste-url-publica.py
+          python3 rodar-contratos-offline.py teste-espelho-seguro.py
+          python3 rodar-contratos-offline.py teste-candidatos-robustos.py
+          python3 rodar-contratos-offline.py teste-sentinela-fila-canonica.py
+          python3 rodar-contratos-offline.py teste-operacao-leitura.py
+          python3 rodar-contratos-offline.py teste-planejamento-operacional.py
+          python3 rodar-contratos-offline.py teste-intencao-operacional.py
+          python3 rodar-contratos-offline.py teste-autorizacao-efeitos.py
 
       - name: Baixar a memória do repositório privado
         env:

@@ -271,11 +271,11 @@ checar("CI isola cada suíte e bloqueia rede externa", 'python3 rodar-contratos-
 checar("suíte não publica memória sintética nem recebe PAT",
        "sincronizar.py subir" not in testes and "secrets.PAT_MEMORIA" not in testes)
 for arquivo in ("teste-sincronizacao-versao.py", "teste-contexto-pedido.py"):
-    checar("worker protege o contrato " + arquivo, "python3 " + arquivo in worker)
+    checar("worker protege o contrato " + arquivo, "python3 rodar-contratos-offline.py " + arquivo in worker)
 
 checar(
     "contrato offline entra na barreira",
-    "python3 teste-workflow-seguranca.py" in testes,
+    "python3 rodar-contratos-offline.py teste-workflow-seguranca.py" in testes,
 )
 
 print("teste-workflow-seguranca:", "PASSOU" if ok else "FALHOU")

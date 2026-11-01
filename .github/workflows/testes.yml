@@ -31,7 +31,7 @@ jobs:
           python-version: '3.12'
 
       - name: Contrato de segurança dos workflows
-        run: python3 teste-workflow-seguranca.py
+        run: python3 rodar-contratos-offline.py teste-workflow-seguranca.py
 
       - name: Barreira offline (sem rede, sem segredo)
         run: |
