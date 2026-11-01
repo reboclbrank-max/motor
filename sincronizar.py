@@ -12,6 +12,7 @@ import os
 import sys
 import tempfile
 import urllib.request
+import urllib.error
 
 API = "https://api.github.com"
 REPO_MEMORIA = (os.environ.get("REPO_MEMORIA") or "reboclbrank-max/agente").strip() or "reboclbrank-max/agente"
@@ -133,6 +134,39 @@ def _ler_local(caminho):
         return f.read()
 
 
+class FalhaSync(ValueError):
+    def __init__(self,codigo):self.codigo=codigo;super().__init__(codigo)
+
+def _id_caminho(caminho):return hashlib.sha256(caminho.encode()).hexdigest()[:16]
+
+def preservar_conflito(caminho,conteudo,anterior,remoto):
+    """Cópia privada imutável e verificável; nunca altera o arquivo em conflito."""
+    local=_sha(conteudo)
+    destino=f'{PASTA}/conflitos-sync/{_id_caminho(caminho)}-{local}.json'
+    registro={'versao':1,'arquivo':caminho,'sha_base':anterior,'sha_remoto_observado':remoto,
+              'sha_local':local,'conteudo_base64':base64.b64encode(conteudo).decode('ascii'),
+              'estado':'revisao_necessaria','politica':'preservar_ambos_sem_reexecutar_acao'}
+    try:existente=_http('GET',f'/repos/{REPO_MEMORIA}/contents/{destino}?ref={RAMO}')
+    except urllib.error.HTTPError as e:
+        if e.code!=404:raise
+        existente=None
+    if existente:
+        salvo=json.loads(base64.b64decode(existente['content']))
+        if salvo.get('arquivo')!=caminho or salvo.get('sha_local')!=local or salvo.get('conteudo_base64')!=registro['conteudo_base64']:
+            raise FalhaSync('copia_privada_divergente')
+        return destino
+    conteudo_registro=json.dumps(registro,ensure_ascii=False,sort_keys=True).encode()
+    recibo=_http('PUT',f'/repos/{REPO_MEMORIA}/contents/{destino}',{'message':'memoria: preserva conflito sem sobrescrever origem',
+                 'branch':RAMO,'content':base64.b64encode(conteudo_registro).decode('ascii')})
+    if not isinstance(recibo,dict) or recibo.get('content',{}).get('sha')!=_sha(conteudo_registro):
+        raise FalhaSync('copia_privada_sem_recibo')
+    return destino
+
+def _relatar_falha(caminho,erro):
+    codigo=erro.codigo if isinstance(erro,FalhaSync) else ('http_'+str(erro.code) if isinstance(erro,urllib.error.HTTPError) else type(erro).__name__)
+    log('arquivo não confirmado:', 'id='+_id_caminho(caminho), 'motivo='+codigo)
+
+
 def subir():
     if not os.path.isdir(PASTA):
         log("nada para subir")
@@ -150,9 +184,10 @@ def subir():
         pastas[:] = [d for d in pastas if not os.path.islink(os.path.join(raiz, d))]
         for nome in sorted(arquivos):
             caminho = os.path.join(raiz, nome).replace(os.sep, "/")
+            conteudo=anterior=existente=None
             try:
                 if not _caminho_seguro(caminho) or os.path.islink(caminho):
-                    raise ValueError("caminho inseguro")
+                    raise FalhaSync("caminho_inseguro")
                 conteudo = _ler_local(caminho)
                 local, existente, anterior = _sha(conteudo), remoto.get(caminho), base.get(caminho)
                 if local == existente:
@@ -164,18 +199,31 @@ def subir():
                     iguais += 1
                     continue
                 if existente != anterior:
-                    raise ValueError("conflito de versão; remoto preservado")
+                    try:
+                        preservar_conflito(caminho,conteudo,anterior,existente)
+                        log('conflito preservado privadamente:', 'id='+_id_caminho(caminho), 'sha_local='+local)
+                    except Exception as backup_erro:
+                        _relatar_falha(caminho,backup_erro)
+                        raise FalhaSync('conflito_sem_copia_confirmada') from None
+                    raise FalhaSync('versoes_divergentes_origem_preservada_copia_confirmada')
                 corpo = {"message": "memoria: sincroniza alteração do runner", "content": base64.b64encode(conteudo).decode("ascii"), "branch": RAMO}
                 if existente:
                     corpo["sha"] = existente
                 resposta = _http("PUT", f"/repos/{REPO_MEMORIA}/contents/{caminho}", corpo)
                 if not isinstance(resposta, dict) or resposta.get("content", {}).get("sha") != local:
-                    raise ValueError("escrita sem recibo de conteúdo confirmado")
+                    raise FalhaSync("recibo_de_escrita_divergente")
                 base[caminho] = local
                 enviados += 1
             except Exception as e:
                 erros += 1
-                log("arquivo não confirmado:", type(e).__name__)
+                if isinstance(e,urllib.error.HTTPError) and e.code==409 and conteudo is not None:
+                    try:
+                        preservar_conflito(caminho,conteudo,anterior,existente)
+                        e=FalhaSync('corrida_http409_copia_privada_confirmada')
+                    except Exception as backup_erro:
+                        _relatar_falha(caminho,backup_erro)
+                        e=FalhaSync('corrida_http409_sem_copia_confirmada')
+                _relatar_falha(caminho,e)
     try:
         _salvar_base(base)
     except Exception as e:

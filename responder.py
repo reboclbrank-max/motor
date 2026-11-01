@@ -57,6 +57,10 @@ def do_evento():
     repro_comentario = os.environ.get("REPROCESSAR_COMMENT", "").strip()
     if repro_issue and repro_comentario:
         num = int(repro_issue)
+        import varrer
+        if (num,f'c{repro_comentario}') in varrer.revisao_historica():
+            C.log("reprocessamento ignorado: origem em revisão histórica")
+            return None
         dados = C.gh("GET", f"/repos/{C.REPO}/issues/comments/{repro_comentario}")
         corpo = (dados.get("body") or "").strip()
         login = (dados.get("user") or {}).get("login")
@@ -662,6 +666,8 @@ def drenar_fila_respostas(orcamento_s=180):
     inicio = time.monotonic()
     itens = C.fila_respostas_carregar()
     restantes = list(itens)
+    import varrer
+    revisao = varrer.revisao_historica()
 
     def retirar(item):
         novo = list(restantes)
@@ -680,6 +686,9 @@ def drenar_fila_respostas(orcamento_s=180):
         if not (numero_p and texto_p and marca_p):
             C.log("fila: item inválido preservado para revisão")
             continue
+        if (numero_p,marca_p) in revisao or str(texto_p).startswith("<!--ensaio-retomada:isolado-->"):
+            C.log("fila: origem histórica/ensaio preservada para revisão, sem executar")
+            continue
         if ja_respondida(numero_p, marca_p):
             retirar(item)
             continue
@@ -690,8 +699,8 @@ def drenar_fila_respostas(orcamento_s=180):
             trabalho_p = trabalhos.recuperar_da_origem()
             if trabalho_p is not None:
                 if trabalho_p['estado'] != 'entregue_para_revisao':
-                    C.log('fila: trabalho incompleto preservado para retomada')
-                    return
+                    C.log('fila: trabalho incompleto preservado para retomada; avalio a próxima origem')
+                    continue
                 resposta_p = trabalhos.recibo(trabalho_p['id'])
         if resposta_p is None:
             C.log("fila: motores ainda fora do ar — mantenho a fila para a próxima execução")

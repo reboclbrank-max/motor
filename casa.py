@@ -371,6 +371,11 @@ def contexto_pedido(texto):
         _PEDIDO_ATUAL.reset(token)
 
 
+def escopo_leitura_operacional():
+    """Restrição explícita do pedido atual; nunca amplia autorização."""
+    return _PEDIDO_ATUAL.get().lstrip().startswith("<!--escopo:leitura-operacional-->")
+
+
 def pedido_explicito(texto=None):
     """Verdadeiro só quando o DONO pediu publicação/postagem nesta mensagem."""
     texto = _PEDIDO_ATUAL.get() if texto is None else texto
@@ -381,6 +386,8 @@ def pedido_explicito(texto=None):
 
 def disparar(acao, gh=None):
     """Dispara uma ação da lista fechada e conta o resultado com honestidade."""
+    if escopo_leitura_operacional():
+        return "BLOQUEADO: esta origem autoriza leitura operacional, não dispatch de workflows."
     chave = (acao or "").strip().lower()
     if chave not in ACOES_PERMITIDAS:
         return (f"⚠️ Ação desconhecida: `{acao}`. O chat só executa "

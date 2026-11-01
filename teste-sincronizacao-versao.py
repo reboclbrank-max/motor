@@ -4,6 +4,9 @@ import json
 import os
 import tempfile
 import unittest
+import urllib.error
+import io
+import contextlib
 from pathlib import Path
 from unittest.mock import patch
 import sincronizar as S
@@ -22,6 +25,10 @@ class Sincronizacao(unittest.TestCase):
         if '/git/blobs/' in caminho:
             sha=caminho.rsplit('/',1)[1];v=next(v for v in self.store.values() if S._sha(v)==sha)
             return {'content':base64.b64encode(v).decode()}
+        if metodo == 'GET' and '/contents/' in caminho:
+            key=caminho.split('/contents/')[1].split('?')[0]
+            if key not in self.store:raise urllib.error.HTTPError('nao_logar_url_privada',404,'faltou',None,None)
+            return {'content':base64.b64encode(self.store[key]).decode(),'sha':S._sha(self.store[key])}
         if metodo == 'PUT':
             key=caminho.split('/contents/')[1];v=self.store.get(key)
             if (S._sha(v) if v is not None else None)!=corpo.get('sha'):raise RuntimeError('HTTP409')
@@ -37,9 +44,13 @@ class Sincronizacao(unittest.TestCase):
     def test_remoto_novo_local_intocado_nao_e_sobrescrito(self):
         self.baixar();self.store[self.arq]=b'outro executor';self.assertEqual(S.subir(),0)
         self.assertEqual(self.store[self.arq],b'outro executor');self.assertFalse(self.puts)
-    def test_duas_edicoes_divergentes_conflito_sem_put(self):
+    def test_duas_edicoes_divergentes_preservam_ambos_sem_put_na_origem(self):
         self.baixar();self.store[self.arq]=b'novo remoto';Path(self.arq).write_bytes(b'novo local')
-        self.assertEqual(S.subir(),1);self.assertEqual(self.store[self.arq],b'novo remoto');self.assertFalse(self.puts)
+        self.assertEqual(S.subir(),1);self.assertEqual(self.store[self.arq],b'novo remoto');self.assertEqual(len(self.puts),1)
+        copias=[json.loads(v) for k,v in self.store.items() if '/conflitos-sync/' in k]
+        self.assertEqual(len(copias),1);self.assertEqual(base64.b64decode(copias[0]['conteudo_base64']),b'novo local')
+        self.assertEqual(copias[0]['sha_local'],S._sha(b'novo local'))
+        self.assertEqual(S.subir(),1);self.assertEqual(len(self.puts),1)
         self.assertEqual(Path(self.arq).read_bytes(),b'novo local')
     def test_local_editado_usa_sha_da_base(self):
         self.baixar();Path(self.arq).write_bytes(b'editado');self.assertEqual(S.subir(),0)
@@ -82,6 +93,22 @@ class Sincronizacao(unittest.TestCase):
             return self.api(m,p,c)
         with patch.object(S,'_http',side_effect=race):self.assertEqual(S.subir(),1)
         self.assertEqual(self.store[self.arq],b'concorrente')
+    def test_backup_falha_nao_finge_preservacao(self):
+        self.baixar();self.store[self.arq]=b'concorrente';Path(self.arq).write_bytes(b'local')
+        out=io.StringIO()
+        with contextlib.redirect_stdout(out),patch.object(S,'preservar_conflito',side_effect=RuntimeError('SEGREDO_PRIVADO')):
+            self.assertEqual(S.subir(),1)
+        self.assertIn('conflito_sem_copia_confirmada',out.getvalue());self.assertNotIn('SEGREDO_PRIVADO',out.getvalue());self.assertNotIn(self.arq,out.getvalue())
+        self.assertEqual(self.store[self.arq],b'concorrente')
+    def test_http409_preserva_local_e_origem(self):
+        self.baixar();Path(self.arq).write_bytes(b'local')
+        def race(m,p,c=None):
+            if m=='PUT' and p.endswith('/'+self.arq):
+                self.store[self.arq]=b'concorrente';raise urllib.error.HTTPError('SEGREDO_PRIVADO',409,'conflito',None,None)
+            return self.api(m,p,c)
+        with patch.object(S,'_http',side_effect=race):self.assertEqual(S.subir(),1)
+        self.assertEqual(self.store[self.arq],b'concorrente')
+        self.assertEqual(len([k for k in self.store if '/conflitos-sync/' in k]),1)
     def test_recibo_incorreto_nao_confirma(self):
         self.baixar();Path(self.arq).write_bytes(b'local')
         with patch.object(S,'_http',side_effect=lambda m,p,c=None: {} if m=='PUT' else self.api(m,p,c)):

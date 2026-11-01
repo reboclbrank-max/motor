@@ -94,6 +94,8 @@ jobs:
           python3 teste-pedido-atual.py
           python3 teste-url-publica.py
           python3 teste-espelho-seguro.py
+          python3 teste-candidatos-robustos.py
+          python3 teste-sentinela-fila-canonica.py
 
       - name: Baixar a memória do repositório privado
         env:

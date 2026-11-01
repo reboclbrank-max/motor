@@ -59,6 +59,7 @@ jobs:
           TELEGRAM_CHAT: ${{ secrets.TELEGRAM_CHANNEL }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHANNEL: ${{ secrets.TELEGRAM_CHANNEL }}
+          FILA_EXIGE_REVISAO_HISTORICA: '1'
         run: python3 sentinela.py
 
       - name: Devolver o que aprendeu (memória)

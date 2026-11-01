@@ -52,20 +52,42 @@ CANDIDATOS_PADRAO = [
 ]
 
 
+def candidato_validado(cand):
+    from urllib.parse import urlsplit
+    if not isinstance(cand,dict):raise ValueError('objeto inválido')
+    for chave in ('nome','base','modelo'):
+        valor=cand.get(chave)
+        if not isinstance(valor,str) or not valor.strip() or any(ord(c)<32 for c in valor):
+            raise ValueError('campo inválido')
+    if (cand.get('tipo') or 'openai')!='openai' or (cand.get('chave') is not None and not isinstance(cand['chave'],str)):
+        raise ValueError('tipo ou chave inválidos')
+    try:
+        url=urlsplit(cand['base'])
+        if url.scheme not in ('http','https') or not url.hostname or url.username is not None or url.password is not None:
+            raise ValueError('URL inválida')
+        timeout=int(cand.get('timeout') or 45)
+        if not 1<=timeout<=90:raise ValueError('prazo inválido')
+    except (TypeError,ValueError):raise ValueError('configuração inválida') from None
+    return {'nome':cand['nome'],'id':'cand-'+C.re.sub(r"\W+","-",cand['nome'].lower())[:24],
+            'tipo':cand.get('tipo') or 'openai','base':cand['base'],'chave':cand.get('chave') or 'unused',
+            'modelo':cand['modelo'],'modelos':[cand['modelo']],'timeout':timeout}
+
+
 def testar_candidatos():
     """Manda o desafio para cada candidato e devolve a lista dos aprovados."""
     try:
         crus = json.loads(C.ler_remoto("MEMORIA/motores-candidatos.json", "[]") or "[]")
     except Exception:
-        crus = []
-    validos = [c for c in crus if isinstance(c, dict) and c.get("base") and c.get("modelo")]
-    candidatos = validos or CANDIDATOS_PADRAO
+        return ["⚠️ cadastro de candidatos ilegível; nada sondado"], []
+    if not isinstance(crus,list):
+        return ['⚠️ cadastro de candidatos inválido: esperada lista; nada sondado'], []
+    candidatos = crus or CANDIDATOS_PADRAO
     aprovados, linhas = [], []
-    for cand in candidatos:
-        p = {"nome": cand["nome"], "id": "cand-" + C.re.sub(r"\W+", "-", cand["nome"].lower())[:24],
-             "tipo": cand.get("tipo") or "openai", "base": cand["base"],
-             "chave": cand.get("chave") or "unused", "modelo": cand["modelo"],
-             "modelos": [cand["modelo"]], "timeout": int(cand.get("timeout") or 45)}
+    for indice,cand in enumerate(candidatos,1):
+        try:p = candidato_validado(cand)
+        except ValueError:
+            linhas.append(f"⚠️ candidato #{indice} ignorado: esquema inválido; nenhum valor do cadastro é impresso")
+            continue
         passou, ms, motivo = C.provar_motor(p, tentativas=1)
         if passou:
             linhas.append(f"✅ candidato {cand['nome']} — {ms} ms · ACERTOU o desafio")

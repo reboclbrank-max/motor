@@ -18,11 +18,11 @@ import banco
 import comum as C
 
 TITULO_SAUDE = "🩺 Saúde do assistente"
-MAX_REPROCESSAR = 4
+MAX_REPROCESSAR = 1
 MAX_RERUN = 3
 TENTATIVAS_POR_ITEM = 2
 LIMITE_IDADE_MIN = 20          # espera 20 min antes de considerar "sem resposta"
-LIMITE_IDADE_MAX_H = 24        # ignora mensagens antigas demais
+LIMITE_IDADE_MAX_H = None      # pendência válida não expira por idade
 
 SITES = [
     ("Site oficial", "https://reboclbrank-max.github.io/site/"),
@@ -94,43 +94,19 @@ def registrar_melhoria(linha):
 
 def perguntas_sem_resposta(diag):
     """Encontra comentários do dono sem resposta do bot (mais velhos que 20 min)."""
-    pendentes = []
-    tentativas = diag.setdefault("reprocessados", {})
-    agora = C.agora()
-    try:
-        issues = C.gh("GET", f"/repos/{C.REPO}/issues?state=open&per_page=25&sort=updated&direction=desc") or []
-    except Exception as e:
-        C.log(f"pendentes: listagem falhou ({e})")
-        return pendentes
-    for issue in issues:
-        numero = issue["number"]
-        try:
-            comentarios = C.gh("GET", f"/repos/{C.REPO}/issues/{numero}/comments?per_page=100") or []
-        except Exception:
-            continue
-        for comentario in comentarios:
-            corpo = (comentario.get("body") or "").strip()
-            if not corpo:
-                continue
-            login = (comentario.get("user") or {}).get("login", "")
-            if login == "github-actions[bot]":
-                continue
-            criado = C.datetime.fromisoformat(comentario["created_at"].replace("Z", "+00:00"))
-            idade_min = (agora - criado).total_seconds() / 60
-            if idade_min < LIMITE_IDADE_MIN or idade_min > LIMITE_IDADE_MAX_H * 60:
-                continue
-            # alguma resposta do bot depois desta mensagem?
-            respondeu = any(
-                (c.get("user") or {}).get("login") == "github-actions[bot]"
-                and c.get("created_at", "") > comentario.get("created_at", "")
-                for c in comentarios
-            )
-            if respondeu:
-                continue
-            cid = str(comentario["id"])
-            if tentativas.get(cid, 0) >= TENTATIVAS_POR_ITEM:
-                continue
-            pendentes.append({"numero": numero, "comentario_id": cid})
+    import varrer
+    pendentes=[]
+    tentativas=diag.setdefault('reprocessados',{})
+    # Uma única definição de dono, origem, resposta final, histórico e paginação.
+    # Falha de leitura não vira lista vazia/saúde verde.
+    for issue,comentario in varrer.pendentes():
+        mensagem=comentario or issue
+        marca=f"c{comentario['id']}" if comentario else f"a{issue['number']}"
+        criado=C.datetime.fromisoformat(mensagem['created_at'].replace('Z','+00:00'))
+        if (C.agora()-criado).total_seconds()<LIMITE_IDADE_MIN*60:continue
+        chave=str(comentario['id']) if comentario else marca
+        if tentativas.get(chave,0)>=TENTATIVAS_POR_ITEM:continue
+        pendentes.append({'numero':issue['number'],'comentario_id':chave,'marca':marca})
     return pendentes
 
 
@@ -275,7 +251,8 @@ def principal():
     # pendências
     pendentes = perguntas_sem_resposta(diag)
     reprocessados = 0
-    for item in pendentes[:MAX_REPROCESSAR]:
+    # Um dispatch já varre todas as origens elegíveis; não cancelar slots com cópias.
+    for item in pendentes[:1]:
         if disparar_reprocessamento(item, diag):
             reprocessados += 1
 
