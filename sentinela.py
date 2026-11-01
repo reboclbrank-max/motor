@@ -97,6 +97,7 @@ def perguntas_sem_resposta(diag):
     import varrer
     pendentes=[]
     tentativas=diag.setdefault('reprocessados',{})
+    diag['pendencias_limite_retentativas']=0
     # Uma única definição de dono, origem, resposta final, histórico e paginação.
     # Falha de leitura não vira lista vazia/saúde verde.
     for issue,comentario in varrer.pendentes():
@@ -105,7 +106,9 @@ def perguntas_sem_resposta(diag):
         criado=C.datetime.fromisoformat(mensagem['created_at'].replace('Z','+00:00'))
         if (C.agora()-criado).total_seconds()<LIMITE_IDADE_MIN*60:continue
         chave=str(comentario['id']) if comentario else marca
-        if tentativas.get(chave,0)>=TENTATIVAS_POR_ITEM:continue
+        if tentativas.get(chave,0)>=TENTATIVAS_POR_ITEM:
+            diag['pendencias_limite_retentativas']+=1
+            continue
         pendentes.append({'numero':issue['number'],'comentario_id':chave,'marca':marca})
     return pendentes
 
@@ -119,10 +122,10 @@ def disparar_reprocessamento(item, diag):
     Agora vai para o repositório do CÓDIGO, sem inputs: a varredura pega a fila inteira
     (inclusive o item que o sentinela viu).
     """
+    tentativas = diag.setdefault("reprocessados", {})
     try:
         C.gh("POST", f"/repos/{C.REPO_ROBO}/actions/workflows/chat.yml/dispatches", {"ref": "main"})
-        diag.setdefault("reprocessados", {})[item["comentario_id"]] = \
-            diag["reprocessados"].get(item["comentario_id"], 0) + 1
+        tentativas[item["comentario_id"]] = tentativas.get(item["comentario_id"], 0) + 1
         C.log(f"reprocessamento disparado: conversa #{item['numero']} comentário {item['comentario_id']}")
         return True
     except Exception as e:
@@ -131,49 +134,30 @@ def disparar_reprocessamento(item, diag):
 
 
 def reruns_de_falhas(diag):
-    """Reexecuta runs do chat que falharam recentemente (auto-cura)."""
-    feitos = 0
-    tentativas = diag.setdefault("reruns", {})
-    try:
-        runs = C.gh("GET", f"/repos/{C.REPO}/actions/runs?per_page=20") or {}
-    except Exception as e:
-        C.log(f"runs: listagem falhou ({e})")
+    """Acorda main atual após falha recente; nunca reexecuta código/histórico antigo."""
+    tentativas=diag.setdefault('reruns',{})
+    runs=C.gh('GET',f'/repos/{C.REPO_ROBO}/actions/workflows/chat.yml/runs?per_page=20')
+    if not isinstance(runs,dict) or not isinstance(runs.get('workflow_runs'),list):
+        raise RuntimeError('falhas_do_executor_nao_observaveis')
+    for run in runs['workflow_runs']:
+        if run.get('conclusion')!='failure':continue
+        criado=C.datetime.fromisoformat(run['created_at'].replace('Z','+00:00'))
+        if (C.agora()-criado).total_seconds()>3600 or tentativas.get(str(run['id']),0):continue
+        pendentes=perguntas_sem_resposta(diag)
+        if not pendentes:return 0
+        if disparar_reprocessamento(pendentes[0],diag):
+            tentativas[str(run['id'])]=1
+            return 1
         return 0
-    agora = C.agora()
-    for run in runs.get("workflow_runs", []):
-        if feitos >= MAX_RERUN:
-            break
-        # só reexecuta FALHAS reais (cancelado costuma ser intencional; reexecutar
-        # run antigo pode responder de novo perguntas já respondidas antes da era das marcas)
-        if run.get("conclusion") != "failure":
-            continue
-        if "Assistente Rebocl (chat)" not in (run.get("name") or ""):
-            continue
-        criado = C.datetime.fromisoformat(run["created_at"].replace("Z", "+00:00"))
-        if (agora - criado).total_seconds() > 60 * 60:
-            continue
-        rid = str(run["id"])
-        if tentativas.get(rid, 0) >= 1:
-            continue
-        try:
-            C.gh("POST", f"/repos/{C.REPO}/actions/runs/{rid}/rerun", {})
-            tentativas[rid] = tentativas.get(rid, 0) + 1
-            feitos += 1
-            C.log(f"rerun disparado para o run {rid}")
-        except Exception as e:
-            C.log(f"rerun falhou ({rid}): {e}")
-            tentativas[rid] = 99
-    # limpeza de registros antigos
-    diag["reruns"] = {k: v for k, v in tentativas.items() if v < 99} if len(tentativas) > 500 else tentativas
-    return feitos
+    return 0
 
 
 def runs_no_mes():
-    """Quantas execuções o repositório já teve neste mês (a conta grátis dá 2.000 min/mês)."""
+    """Contagem observada (até 200 runs); não confundir execuções com minutos."""
     total = 0
     try:
         for pagina in (1, 2):
-            d = C.gh("GET", f"/repos/{C.REPO}/actions/runs?per_page=100&page={pagina}") or {}
+            d = C.gh("GET", f"/repos/{C.REPO_ROBO}/actions/runs?per_page=100&page={pagina}") or {}
             lista = d.get("workflow_runs", [])
             if not lista:
                 break
@@ -188,18 +172,10 @@ def runs_no_mes():
 def principal():
     diag = C.ler_diagnostico()
 
-    # guarda de orçamento: se o mês estiver pesado, o vigia espaça sozinho (1x a cada 3 h / 6 h)
-    usados = runs_no_mes()
-    if usados is not None:
-        hora = C.agora().hour
-        if usados > 1850 and hora % 6 != 0:
-            C.log(f"orçamento: {usados} execuções no mês — vigia em modo econômico (1x/6h); pulando agora")
-            return 0
-        if usados > 1650 and hora % 3 != 0:
-            C.log(f"orçamento: {usados} execuções no mês — vigia em modo econômico (1x/3h); pulando agora")
-            return 0
-        if usados > 1650:
-            C.log(f"orçamento: {usados} execuções no mês — modo econômico ativo")
+    # Contagem de runs não mede minutos nem autoriza gasto; não suspender retomada
+    # do executor público por uma estimativa baseada no repositório privado.
+    usados=runs_no_mes()
+    C.log('execuções do executor observadas neste mês (até 200): '+str(usados if usados is not None else 'NAO_OBSERVAVEL'))
     linhas_motores = testar_motores()
     motores_ok = any(l.startswith("✅") for l in linhas_motores)
     falhas_sites = testar_sites()
@@ -256,10 +232,12 @@ def principal():
         if disparar_reprocessamento(item, diag):
             reprocessados += 1
 
-    reruns = reruns_de_falhas(diag)
+    reruns = 0 if reprocessados else reruns_de_falhas(diag)
 
     # estado
     problemas = []
+    if diag.get("pendencias_limite_retentativas"):
+        problemas.append(str(diag["pendencias_limite_retentativas"])+" origem(ns) ainda pendentes após limite de despertares; não declaradas entregues")
     if not motores_ok:
         problemas.append("nenhum motor respondendo")
         registrar_melhoria(f"({C.agora().strftime('%d/%m %H:%M')}) nenhum motor respondendo — conferir os motores gratuitos")

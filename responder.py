@@ -88,8 +88,10 @@ def ja_respondida(numero, marca):
     """Verdadeiro quando a resposta para esta mensagem já existe (evita duplicatas)."""
     alvo = MARCA_ABERTURA + marca + "-->"
     comentarios = C.comentarios_da_conversa_verificados(numero)
+    import casa,operacao_leitura as O
     return any(
         C.comentario_e_resposta_final(c) and alvo in (c.get("body") or "")
+        and (not casa.escopo_leitura_operacional() or O.marcador(marca) in (c.get("body") or ""))
         for c in comentarios)
 
 
@@ -689,6 +691,13 @@ def drenar_fila_respostas(orcamento_s=180):
         if (numero_p,marca_p) in revisao or str(texto_p).startswith("<!--ensaio-retomada:isolado-->"):
             C.log("fila: origem histórica/ensaio preservada para revisão, sem executar")
             continue
+        import operacao_leitura as O
+        if str(texto_p).lstrip().startswith(O.PREFIXO):
+            import trabalhos
+            with trabalhos.contexto_mensagem(numero_p,marca_p,texto_p):
+                if responder_operacao_leitura(numero_p,texto_p,marca_p)==0:
+                    restantes[:]=[i for i in restantes if i is not item]
+            continue
         if ja_respondida(numero_p, marca_p):
             retirar(item)
             continue
@@ -765,6 +774,23 @@ def retomar_trabalho_da_mensagem(numero, texto, marca, registro):
     return 1
 
 
+def responder_operacao_leitura(numero,texto,marca):
+    import operacao_leitura as O
+    try:
+        recibo=O.executar(texto)
+        resposta="Conferência operacional concluída com fontes reais. Uma resposta anterior sem este recibo não comprovava a entrega.\n\n"+recibo+"\n\n"+O.marcador(marca)
+        if not ja_respondida(numero,marca):responder(numero,resposta,marca)
+        if not ja_respondida(numero,marca):raise RuntimeError('entrega nao confirmada')
+        fila=C.fila_respostas_carregar();nova=[i for i in fila if not(i.get('numero')==numero and i.get('marca')==marca)]
+        if len(nova)!=len(fila) and not C.fila_respostas_salvar(nova):raise RuntimeError('checkpoint de fila nao confirmado')
+        return 0
+    except Exception as e:
+        C.log('leitura operacional: bloqueio verificavel ('+type(e).__name__+')')
+        garantir_pendencia(numero,texto,marca)
+        responder(numero,'Ainda não concluí esta leitura operacional. A origem e os checkpoints foram preservados; não há recibo novo confirmado. Nenhuma ação externa é autorizada por esta falha.',marca,pendente=True)
+        return 1
+
+
 def principal():
     import trabalhos
     dados = do_evento()
@@ -803,6 +829,10 @@ def _principal_com_origem(dados):
         elif ja_respondida(numero, marca):
             C.log(f"já respondida (marca {marca}) — ignorando para não duplicar")
             return 0
+
+        import casa
+        if casa.escopo_leitura_operacional():
+            return responder_operacao_leitura(numero,texto,marca)
 
         import trabalhos
         trabalho_anterior = trabalhos.recuperar_da_origem()

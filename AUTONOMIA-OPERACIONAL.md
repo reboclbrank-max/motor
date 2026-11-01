@@ -29,3 +29,11 @@ Logs públicos contêm identificador hash do caminho e motivo, não nome/conteú
 As regressões offline são executadas em cópias descartáveis, sem credenciais e com conexões externas bloqueadas na bancada local. O workflow `testes.yml` inclui as novas regressões. Tarefas reais devem ter plano persistido, artefatos conferidos e recibo; êxito de teste não basta para comprovar operação cotidiana. `entregue_para_revisao` é entrega verificável, não aprovação humana automática nem qualidade garantida.
 
 Não declarar autonomia total: permanecem dependências de disponibilidade, cotas, permissão das plataformas e qualidade do modelo. Uma credencial com privilégio excessivo não pode ser substituída automaticamente por este código.
+
+## Correção derivada da tarefa real
+
+A primeira execução operacional mostrou evidência escrita antes de consultar fonte e uma resposta final sem plano. Não foi aceita como prova. O modo de leitura operacional agora tem executor determinístico: identifica somente fontes explicitamente suportadas, lê a API antes de salvar evidência, fixa arquivos por commit/SHA, guarda relatório privado, registra etapa e reconfere o recibo. Não passa por modelo, avisos, atalhos ou cache. Planos antigos sem essa proveniência são arquivados integralmente junto de seus artefatos antes de revisão. Resposta antiga sem marcador de entrega verificada não fecha uma tarefa desse modo; a correção é acrescentada sem apagar o histórico. Reentrada não refaz leitura ou entrega já confirmada.
+
+Fontes suportadas nesse modo: `Use ACOES com filtro chat` e `Leia REPO site/.github/workflows/postagem-diaria.yml`, com filtro/arquivo público equivalentes. Pedido sem fonte suportada bloqueia claramente, sem ampliar ações. Esse executor comprova automação útil de leitura, não planejamento livre confiável do modelo para qualquer objetivo.
+
+O sentinela consulta o workflow atual do Motor e pode acordar main para pendências elegíveis após uma falha recente, uma vez. Não reroda o commit antigo nem ordens históricas. Limite de despertares fica visível como pendência, não como entrega. Contagem parcial de runs não é medida de minutos ou autorização de gasto.

@@ -37,6 +37,21 @@ class Fila(unittest.TestCase):
   import trabalhos
   with trabalhos.contexto_mensagem(100,'a100','<!--escopo:leitura-operacional-->objetivo'),patch.object(trabalhos,'executar',return_value='ok') as e:
    self.assertEqual(S.C.executar_ferramenta('TRABALHO',json.dumps({'acao':'criar','objetivo':'ler','etapas':['ler']})),'ok');e.assert_called_once()
+ def test_recuperacao_usa_fila_atual_e_nao_rerun_antigo(self):
+  agora=datetime.datetime(2026,11,1,tzinfo=datetime.timezone.utc);calls=[]
+  def gh(m,p,*a):
+   calls.append((m,p));return {'workflow_runs':[{'id':1,'conclusion':'failure','created_at':agora.isoformat()}]} if m=='GET' else {}
+  with patch.object(S.C,'gh',side_effect=gh),patch.object(S.C,'agora',return_value=agora),patch.object(S,'perguntas_sem_resposta',return_value=[{'numero':1,'comentario_id':'a1'}]):
+   d={};self.assertEqual(S.reruns_de_falhas(d),1);self.assertEqual(S.reruns_de_falhas(d),0)
+  self.assertTrue(all('/'+S.C.REPO_ROBO+'/' in p for m,p in calls));self.assertTrue(any('/dispatches' in p for m,p in calls));self.assertFalse(any(p.endswith('/rerun') for m,p in calls))
+ def test_falha_sem_pendente_nao_dispara(self):
+  agora=datetime.datetime(2026,11,1,tzinfo=datetime.timezone.utc)
+  with patch.object(S.C,'gh',return_value={'workflow_runs':[{'id':1,'conclusion':'failure','created_at':agora.isoformat()}]}) as gh,patch.object(S.C,'agora',return_value=agora),patch.object(S,'perguntas_sem_resposta',return_value=[]):
+   self.assertEqual(S.reruns_de_falhas({}),0);self.assertTrue(all(c.args[0]=='GET' for c in gh.call_args_list))
+ def test_limite_de_despertares_nao_esconde_bloqueio(self):
+  i={'number':7,'created_at':'2020-01-01T00:00:00Z'}
+  with patch.object(V,'pendentes',return_value=[(i,None)]),patch.object(S.C,'agora',return_value=datetime.datetime(2026,11,1,tzinfo=datetime.timezone.utc)):
+   d={'reprocessados':{'a7':2}};self.assertEqual(S.perguntas_sem_resposta(d),[]);self.assertEqual(d['pendencias_limite_retentativas'],1)
  def test_um_dispatch_por_ciclo(self):
   from pathlib import Path
   self.assertIn('for item in pendentes[:1]:',Path(S.__file__).read_text())
