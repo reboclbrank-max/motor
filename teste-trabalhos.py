@@ -127,6 +127,34 @@ class Trabalhos(unittest.TestCase):
         r = self.chamar(acao='registrar_etapa', id=r['id'], etapa=1, conteudo='conteúdo estável')
         self.assertEqual(r['etapas'][0]['evidencia']['sha_blob'], sha)
 
+    def test_recibo_conferido_aparece_mesmo_com_texto_candidato_descartado(self):
+        r = self.criar(); path = self.evidencia()
+        for n in [1, 2]:
+            self.chamar(acao='registrar_etapa', id=r['id'], etapa=n, arquivo=path)
+        r = self.chamar(acao='entregar', id=r['id'], resultado='relatório para revisão')
+        usos = []
+        C.rastrear_entrega_trabalho('TRABALHO', json.dumps(r), usos)
+        recibo = C.anexar_recibos_trabalho('Texto original vencedor', usos)
+        self.assertIn(r['id'], recibo)
+        self.assertIn(path, recibo)
+        self.assertIn('Texto original vencedor', recibo)
+        self.assertIn('conferidos', recibo)
+
+    def test_recibo_nao_confirma_evidencia_que_mudou(self):
+        r = self.criar(); path = self.evidencia()
+        for n in [1, 2]:
+            self.chamar(acao='registrar_etapa', id=r['id'], etapa=n, arquivo=path)
+        r = self.chamar(acao='entregar', id=r['id'], resultado='relatório para revisão')
+        self.store[path]['sha'] = 'novo'
+        texto = C.anexar_recibos_trabalho('resposta', ['recibo-trabalho:'+r['id']])
+        self.assertIn('não confirmo', texto)
+        self.assertNotIn('Arquivos conferidos', texto)
+
+    def test_alegacao_textual_nao_gera_recibo(self):
+        usos = []
+        C.rastrear_entrega_trabalho('TRABALHO', 'Eu concluí tudo', usos)
+        self.assertEqual(usos, [])
+
     def test_marcador_e_roteador_estao_ligados(self):
         dado = json.dumps({'acao':'criar', 'objetivo':'teste', 'etapas':['validar']})
         achado = C.RE_FERRAMENTA.search('[[TRABALHO: '+dado+']]')

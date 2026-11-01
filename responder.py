@@ -331,6 +331,7 @@ def pensar_bem_com_ferramentas(resposta, numero, motor_nome):
         except Exception as e:
             resultado = f"A ferramenta falhou: {str(e)[:150]}"
         usos.append(f"{tipo.lower()}: {argumento[:50]}")
+        C.rastrear_entrega_trabalho(tipo, resultado, usos)
         try:
             novo, motor2, _e = C.chamar_llm(
                 [{"role": "user", "content": (
@@ -1181,6 +1182,9 @@ def principal():
                         {"role": "user", "content": texto + "\n\n" + _rel.reforco(texto)}]
                     _outra, _motor2, _usos2, _erro2 = C.responder_com_ferramentas(
                         _historico2, numero, preferir=motor_nome)
+                    # Ferramentas executadas têm efeitos reais mesmo se o texto
+                    # candidato não vencer a comparação de relevância.
+                    usos = list(dict.fromkeys((usos or []) + (_usos2 or [])))
                     if _outra:
                         _escolhida, _rotulo, _aval = _rel.melhor(
                             texto, [(resposta, "primeira"), (_outra, "reforçada")])
@@ -1203,6 +1207,7 @@ def principal():
             if usos_extras:
                 usos = (usos or []) + usos_extras
             resposta, usos = garantir_memoria(texto, resposta, usos)
+            resposta = C.anexar_recibos_trabalho(resposta, usos)
             _rotulo_motor = motor_nome or 'modo direto, sem motor'
             try:
                 import confianca as _cfr

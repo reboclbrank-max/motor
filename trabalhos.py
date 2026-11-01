@@ -130,3 +130,18 @@ def executar(argumento):
             raise ValueError('ação desconhecida: criar/status/registrar_etapa/bloquear/retomar/entregar')
         salvar(registro, sha)
     return json.dumps(registro, ensure_ascii=False)
+
+
+def recibo(identificador):
+    registro, _sha = carregar(identificador)
+    if registro.get('estado') != 'entregue_para_revisao':
+        raise ValueError('trabalho ainda não entregue para revisão')
+    linhas = [f"**Recibo do trabalho `{identificador}`**", 'Estado: entregue para revisão.']
+    for etapa in registro['etapas']:
+        ev = etapa['evidencia']
+        info = C.gh('GET', f'/repos/{C.REPO}/contents/{ev["arquivo"]}')
+        if info.get('sha') != ev['sha_blob']:
+            raise ValueError('arquivo diverge da evidência registrada')
+        linhas.append(f"- Etapa {etapa['numero']}: [{ev['arquivo']}](https://github.com/{C.REPO}/blob/main/{ev['arquivo']})")
+    linhas.append('Arquivos conferidos no repositório; conteúdo entregue para revisão, não aprovação automática.')
+    return '\n'.join(linhas)
