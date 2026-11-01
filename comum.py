@@ -272,6 +272,7 @@ def acrescentar_memoria(caminho, linha, titulo=None):
             dados["sha"] = sha
         try:
             gh("PUT", f"/repos/{REPO}/contents/{caminho}", dados)
+            _gravar_local_memoria(caminho, novo, estrito=True)
             return True
         except RuntimeError as e:
             if "409" not in str(e) or tentativa == 2:
@@ -307,7 +308,7 @@ def ler_de(repo, caminho, padrao=""):
     return padrao
 
 
-def _gravar_local_memoria(caminho, conteudo):
+def _gravar_local_memoria(caminho, conteudo, estrito=False):
     """Espelha no disco o que foi escrito direto na API.
 
     POR QUE: `sincronizar.py subir` envia os arquivos do DISCO. Se `escrever_remoto` não
@@ -316,12 +317,14 @@ def _gravar_local_memoria(caminho, conteudo):
     teste tendo rodado certo e o resultado "sumindo" no fim do workflow.
     """
     try:
-        if caminho.startswith("MEMORIA/") and os.path.isdir("MEMORIA"):
+        if caminho.startswith("MEMORIA/") and (estrito or os.path.isdir("MEMORIA")):
             os.makedirs(os.path.dirname(caminho) or ".", exist_ok=True)
             with open(caminho, "w", encoding="utf-8") as f:
                 f.write(conteudo)
     except Exception as e:
-        log(f"espelho local de {caminho} não gravou: {e}")
+        log(f"espelho local de {caminho} não gravou: {type(e).__name__}")
+        if estrito:
+            raise
 
 
 def escrever_remoto(caminho, conteudo, mensagem):
