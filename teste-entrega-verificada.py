@@ -88,6 +88,8 @@ class EntregaTest(unittest.TestCase):
                     arquivo=root/caminho.split('/contents/')[1]
                     arquivo.parent.mkdir(parents=True,exist_ok=True)
                     arquivo.write_bytes(base64.b64decode(corpo['content']));return {'ok':True}
+                if metodo=='GET' and '/contents/MEMORIA/trabalhos/' in caminho:
+                    raise RuntimeError('HTTP 404')
                 raise AssertionError('Acesso inesperado: '+metodo+' '+caminho)
             with patch.object(V.C,'gh',side_effect=api),patch.object(V.C,'sha_arquivo',return_value=None):
                 self.assertTrue(V.processar(self.issue,None))

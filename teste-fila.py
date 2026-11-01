@@ -12,6 +12,8 @@ import responder as R
 
 store = {}
 def fake_gh(metodo, caminho, corpo=None):
+    if not caminho.endswith(C.ARQ_FILA_RESPOSTAS):
+        raise RuntimeError("HTTP 404")
     if C.ARQ_FILA_RESPOSTAS not in store:
         raise RuntimeError("GitHub API → HTTP 404: ausente")
     return {"content": base64.b64encode(store[C.ARQ_FILA_RESPOSTAS].encode()).decode()}
