@@ -82,6 +82,7 @@ jobs:
           python3 teste-memoria-persistente.py
           python3 teste-fila-sem-expiracao.py
           python3 teste-fila-por-mensagem.py
+          python3 teste-retomada-fila.py
 
       - name: Baixar a memória do repositório privado
         env:

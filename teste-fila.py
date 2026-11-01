@@ -45,7 +45,7 @@ def fake_responder(numero, texto, marca, extra=""):
 
 
 R.responder = fake_responder
-R.ja_respondida = lambda numero, marca: False
+R.ja_respondida = lambda numero, marca: (numero, marca) in publicados
 C.responder_com_ferramentas = lambda historico, numero=None, preferir=None: ("resposta ok", "Motor X", [], None)
 C.historico_da_conversa = lambda numero, pular_id=None: []
 C.registrar_conversa = lambda *a, **k: True
@@ -68,21 +68,21 @@ R.ja_respondida = lambda numero, marca: True
 R.drenar_fila_respostas()
 check("já respondida: descarta sem publicar", not publicados and not C.fila_respostas_carregar())
 
-# ---- limite: 2 por execução ----
-R.ja_respondida = lambda numero, marca: False
+# ---- sem teto de duas respostas ----
+R.ja_respondida = lambda numero, marca: (numero, marca) in publicados
 C.responder_com_ferramentas = lambda historico, numero=None, preferir=None: ("ok", "M", [], None)
 for i in range(5):
     C.fila_respostas_adicionar(30 + i, f"pergunta {i}", f"c30{i}")
 publicados.clear()
 R.drenar_fila_respostas()
-check("máx 2 por execução", len(publicados) == 2)
-check("restaram 3 na fila", len(C.fila_respostas_carregar()) == 3)
+check("drena todas as cinco respostas", len(publicados) == 5)
+check("nenhuma pendência restante", len(C.fila_respostas_carregar()) == 0)
 
 # ---- nenhum pedido descartado por quantidade ----
 for i in range(40):
     C.fila_respostas_adicionar(100 + i, f"q{i}", f"m{i}")
-check("preserva todos os 43 pedidos pendentes", len(C.fila_respostas_carregar()) == 43)
-check("preserva a pendência anterior ao lote de 40", C.fila_respostas_carregar()[0]["marca"] == "c302")
+check("preserva todos os 40 pedidos pendentes", len(C.fila_respostas_carregar()) == 40)
+check("preserva a primeira pendência do lote de 40", C.fila_respostas_carregar()[0]["marca"] == "m0")
 texto_longo = "X" * 12000
 C.fila_respostas_adicionar(999, texto_longo, "longo999")
 check("texto longo não é cortado ao enfileirar", C.fila_respostas_carregar()[-1]["texto"] == texto_longo)
