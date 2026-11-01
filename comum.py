@@ -4246,6 +4246,33 @@ def historico_da_conversa(numero, pular_id=None):
     return list(reversed(recorte))
 
 
+def rastrear_entrega_trabalho(tipo, resultado, usos):
+    """Rastro do retorno REAL da ferramenta, nunca de alegação textual do modelo."""
+    if tipo != "TRABALHO":
+        return
+    try:
+        registro = json.loads(resultado)
+        ident = registro.get("id", "")
+        if (registro.get("estado") == "entregue_para_revisao"
+                and re.fullmatch(r"[a-f0-9]{32}", ident)):
+            usos.append("recibo-trabalho:" + ident)
+    except (ValueError, TypeError, AttributeError):
+        pass
+
+
+def anexar_recibos_trabalho(resposta, usos):
+    import trabalhos
+    ids = list(dict.fromkeys(u.split(":", 1)[1] for u in (usos or [])
+                            if u.startswith("recibo-trabalho:")))
+    for ident in ids:
+        try:
+            recibo = trabalhos.recibo(ident)
+        except Exception:
+            recibo = f"⚠️ Não consegui conferir agora o recibo do trabalho `{ident}`; não confirmo a entrega nesta leitura."
+        resposta += "\n\n---\n\n" + recibo
+    return resposta
+
+
 def responder_com_ferramentas(historico, numero=None, preferir=None, preciso=False):
     """Loop: o motor pode pedir ferramentas antes de responder. Antes da primeira
     chamada: (a) se o dono ensinou algo, a lição vira permanente; (b) se a pergunta é
@@ -4294,6 +4321,7 @@ def responder_com_ferramentas(historico, numero=None, preferir=None, preciso=Fal
         except Exception as e:
             resultado = f"A ferramenta falhou: {str(e)[:150]}"
         usos.append(f"{tipo.lower()}: {argumento[:50]}")
+        rastrear_entrega_trabalho(tipo, resultado, usos)
         conversa = conversa + [
             {"role": "assistant", "content": texto},
             {"role": "user", "content": (f"[resultado da ferramenta {tipo}]\n{resultado[:6000]}\n\n"
