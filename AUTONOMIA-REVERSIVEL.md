@@ -39,7 +39,8 @@ Ao atualizar projeto explicitamente identificado, o controlador lê somente esse
 ## Evolução técnica de 2026-11-02 — missões e aceite observado (estado v2)
 
 Novos projetos são decompostos em até5subtarefas verificáveis. Uma segunda
-passagem de modelo recebe o objetivo ORIGINAL e a proposta como dados (sem histórico),
+passagem de modelo recebe o objetivo ORIGINAL e apenas interfaces extraídas por AST
+(nomes/argumentos; sem corpo, docstrings, testes, valores da implementação ou histórico),
 deriva casos de entrada/saída/exceção e vincula cada subtarefa a pelo menos um caso.
 Esse contrato declarativo é validado e congelado por SHA256 ANTES do PR/CI.
 Não contém código de teste executável, shell, repo, workflow ou autoridade.

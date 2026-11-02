@@ -66,6 +66,8 @@ class Aceite(unittest.TestCase):
   for src in ['raise ValueError("importacao")\ndef contar(xs):return 0\n','def contar(xs):return float("nan")\n','def contar(xs):raise ValueError("entrada")\n']:
    with tempfile.TemporaryDirectory() as td:
     pathlib.Path(td,'main.py').write_text(src);r=subprocess.run([sys.executable,'-c',S.harness(v).replace('/projeto',td)],capture_output=True,text=True,timeout=5);raw=json.loads(r.stdout.split('RESULTADO_CI:')[1]);self.assertEqual(S.comparar(v,raw['observacoes'])['sucesso'],'raise ValueError("entrada")' in src)
+ def test_interface_para_revisor_nao_inclui_corpos_docstrings_ou_testes(self):
+  fs={'main.py':'def contar(xs):\n "segredo_de_corpo"\n return {"total":999}\n','test_main.py':FS['test_main.py']};data=json.dumps(S.interfaces(fs));self.assertIn('contar',data);self.assertNotIn('999',data);self.assertNotIn('segredo_de_corpo',data);self.assertNotIn('test_main',data);self.assertIn('xs',data)
  def test_atualizar_reconhecido(self):
   self.assertTrue(A.eh_objetivo('Atualize projeto '+'a'*32));self.assertTrue(A.eh_objetivo('Atualizar projeto '+'a'*32))
  def test_teto_de_chamadas_preservado(self):
@@ -84,7 +86,7 @@ class Fluxo(unittest.TestCase):
   def preparar(s,pedido,p):s.update(fase='pr_criada',head='a'*40,pr=7,pr_url='https://example.test/pr/7',prefixo_projeto='PROJETOS/'+s['id']+'/',arquivos_sha={'main.py':'x'});A.salvar(s)
   def dispatch(s):s['fase']='ci_aguardando';A.salvar(s)
   with T.contexto_mensagem(123,'a123',self.goal),patch.object(C,'chamar_llm',return_value=(json.dumps(CON_SOMA),'revisor-fixture',None)) as llm:
-   state=self.state();REAL_PREPARAR(state,self.goal);self.assertEqual(state['chamadas_modelo'],2);self.assertEqual(state['aceite_sha256'],S.digest(CON_SOMA));self.assertIn(self.goal,llm.call_args.args[0][0]['content']);self.assertEqual(state['subtarefas'][0]['estado'],'aguarda_execucao')
+   state=self.state();REAL_PREPARAR(state,self.goal);self.assertEqual(state['chamadas_modelo'],2);self.assertEqual(state['aceite_sha256'],S.digest(CON_SOMA));self.assertIn(self.goal,llm.call_args.args[0][0]['content']);self.assertNotIn('def somar',llm.call_args.args[0][0]['content']);self.assertNotIn('self.assertEqual',llm.call_args.args[0][0]['content']);self.assertEqual(state['subtarefas'][0]['estado'],'aguarda_execucao')
    self.review.stop()
    with patch.object(A,'preparar_pr',side_effect=preparar),patch.object(A,'despachar_ci',side_effect=dispatch),patch.object(A,'integrar',side_effect=A.Aguardar('CI em andamento')):
     for _ in range(2):

@@ -30,6 +30,18 @@ def validar(v,fs):
  if {c['etapa'] for c in casos}!=set(range(1,len(etapas)+1)):raise ValueError('cada subtarefa precisa de caso observável')
  return v
 
+def interfaces(fs):
+ # Só estrutura de API: corpo, docstrings, valores e testes não viram expectativas.
+ out={}
+ for n,src in fs.items():
+  if not n.endswith('.py') or n.startswith('test_'):continue
+  funcoes={}
+  for node in ast.parse(src).body:
+   if isinstance(node,ast.FunctionDef) and not node.name.startswith('_'):
+    funcoes[node.name]={'posicionais':[a.arg for a in node.args.posonlyargs+node.args.args],'nomeados':[a.arg for a in node.args.kwonlyargs],'defaults_posicionais':len(node.args.defaults),'varargs':bool(node.args.vararg),'kwargs':bool(node.args.kwarg)}
+  out[n]={'funcoes_publicas':funcoes,'cli_python_disponivel':True}
+ return out
+
 def chamadas(v):
  # Nunca enviar esperado/erro ao programa avaliado.
  return [{k:c[k] for k in ('modulo','funcao','args','kwargs','script','entrada') if k in c} for c in v['casos']]
