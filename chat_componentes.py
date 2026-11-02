@@ -92,8 +92,12 @@ def modelo_local(s,ci):
  def chamar(mensagens,system=''):
   import motor_local
   # Mesma família local já suportada pelo runner; nenhum prompt sai pela rede.
-  motor_local.MODELO='https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/main/qwen2.5-7b-instruct-q4_k_m.gguf'
-  motor_local.ARQUIVO='qwen2.5-7b-instruct-q4_k_m.gguf'
+  partes=['qwen2.5-7b-instruct-q4_k_m-00001-of-00002.gguf','qwen2.5-7b-instruct-q4_k_m-00002-of-00002.gguf']
+  base='https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/main/'
+  for parte in partes:
+   motor_local.MODELO=base+parte;motor_local.ARQUIVO=parte
+   if not motor_local.baixar():return None,'local-7b-sem-chave','pesos locais indisponíveis'
+  motor_local.MODELO=base+partes[0];motor_local.ARQUIVO=partes[0]
   prompt=('Escreva SOMENTE código Python completo para formatador.py, sem JSON, sem explicações. '
    'API: def formatar(dados) -> str. Lista com até100dicts. Não mude entrada. '
    'Se dados não for lista, exceder100 ou um elemento não for dict: ValueError. '

@@ -46,7 +46,7 @@ class Componentes(unittest.TestCase):
  def test_modelo_somente_local_nao_cadeia_remota(self):
   import motor_local
   s={'plano':{'arquivos':{'formatador.py':F.BASELINE}}};original=C.chamar_llm
-  with patch.object(motor_local,'responder',return_value=('def formatar(dados):\n return \"\"',None)) as local:
+  with patch.object(motor_local,'baixar',return_value='/fixture'),patch.object(motor_local,'responder',return_value=('def formatar(dados):\n return \"\"',None)) as local:
    with F.modelo_local(s,{'detalhes':'falha'}):self.assertEqual(C.chamar_llm([])[1],'local-7b-sem-chave')
    local.assert_called_once();self.assertIs(C.chamar_llm,original)
  def test_runtime_rollback_cas_sem_entregar_stdout(self):
@@ -89,7 +89,7 @@ class Componentes(unittest.TestCase):
  def test_orcamento8_exige_aprovacao_e_restaura_contexto(self):
   import motor_local
   p=dict(self.p,limite_modelo=8,aprovacao_orcamento='dono-ampliar-local-8-preserva-3')
-  with patch.object(F,'politica',return_value=p),patch.object(motor_local,'responder',return_value=('def formatar(dados):return ""',None)):
+  with patch.object(F,'politica',return_value=p),patch.object(motor_local,'baixar',return_value='/fixture'),patch.object(motor_local,'responder',return_value=('def formatar(dados):return ""',None)):
    self.assertEqual(A._LIMITE_MODELO.get(),3)
    with F.modelo_local({'plano':{'arquivos':{'formatador.py':F.BASELINE}}},{}):self.assertEqual(A._LIMITE_MODELO.get(),8)
    self.assertEqual(A._LIMITE_MODELO.get(),3)
@@ -97,7 +97,7 @@ class Componentes(unittest.TestCase):
    with self.assertRaises(A.Revisao):REAL_POLITICA()
  def test_codigo_invalido_tambem_e_encapsulado_para_journal(self):
   import motor_local
-  with patch.object(motor_local,'responder',return_value=('def formatar(:',None)):
+  with patch.object(motor_local,'baixar',return_value='/fixture'),patch.object(motor_local,'responder',return_value=('def formatar(:',None)):
    with F.modelo_local({'plano':{'arquivos':{'formatador.py':F.BASELINE}}},{}):
     texto,_,_=C.chamar_llm([]);self.assertEqual(json.loads(texto)['arquivos']['formatador.py'],'def formatar(:\n')
 if __name__=='__main__':unittest.main()
