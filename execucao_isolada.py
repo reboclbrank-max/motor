@@ -20,14 +20,14 @@ def validar_arquivos(fs):
  if not any(n.endswith('.py') and not n.startswith('test_') for n in fs):raise ValueError('falta implementação')
  return fs
 
-def executar(fs):
+def _container(fs,harness=HARNESS):
  validar_arquivos(fs)
  env={k:os.environ[k] for k in ('PATH','HOME','LANG') if k in os.environ}
  # A daemon/socket Docker nunca entra no container. Ambiente do host não é passado.
  with tempfile.TemporaryDirectory(prefix='projeto-autonomo-') as td:
   p=pathlib.Path(td);p.chmod(0o755);src=p/'projeto';src.mkdir(mode=0o755)
   for n,v in fs.items():(src/n).write_text(v);(src/n).chmod(0o644)
-  h=p/'avaliar.py';h.write_text(HARNESS);h.chmod(0o644)
+  h=p/'avaliar.py';h.write_text(harness);h.chmod(0o644)
   subprocess.run(['docker','pull',IMAGEM],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=True,timeout=120)
   nome='autonomia-'+uuid.uuid4().hex
   cmd=['docker','run','--name',nome,'--rm','--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--user=65534:65534','--pids-limit=64','--memory=256m','--cpus=1','--tmpfs','/tmp:rw,noexec,nosuid,size=32m','--mount',f'type=bind,src={src},dst=/projeto,readonly','--mount',f'type=bind,src={h},dst=/avaliar.py,readonly','--env','PYTHONDONTWRITEBYTECODE=1',IMAGEM,'python','-B','/avaliar.py']
@@ -45,8 +45,23 @@ def executar(fs):
   if not linhas:return {'sucesso':False,'testes':0,'detalhes':out[-6000:]}
   try:v=json.loads(linhas[-1])
   except (ValueError,TypeError):return {'sucesso':False,'testes':0,'detalhes':'resultado inválido'}
-  return {'sucesso':r.returncode==0 and v.get('sucesso') is True and type(v.get('testes')) is int and v['testes']>0,'testes':v.get('testes',0),'detalhes':str(v.get('detalhes',''))[-6000:]}
+  return {'sucesso':r.returncode==0 and v.get('sucesso') is True and type(v.get('testes')) is int and v['testes']>0,'testes':v.get('testes',0),'detalhes':str(v.get('detalhes',''))[-6000:],**({'observacoes':v['observacoes']} if 'observacoes' in v else {})}
 
 def _limite_saida():
  import resource
  resource.setrlimit(resource.RLIMIT_FSIZE,(65536,65536))
+
+
+def executar(fs,aceite=None):
+ if aceite is not None:
+  import aceite_semantico as S
+  S.validar(aceite,fs)
+ r=_container(fs)
+ if aceite is None:return r
+ r['aceite_sha256']=S.digest(aceite)
+ if not r['sucesso']:return r
+ bruto=_container(fs,S.harness(aceite))
+ verificacao=S.comparar(aceite,bruto.get('observacoes')) if bruto['sucesso'] else {'sucesso':False,'casos':0,'falhas':['execução de aceite falhou: '+bruto['detalhes']]}
+ r['aceite']=verificacao;r['sucesso']=r['sucesso'] and verificacao['sucesso']
+ if not verificacao['sucesso']:r['detalhes']='Aceite semântico rejeitado: '+str(verificacao['falhas'])[-5500:]
+ return r

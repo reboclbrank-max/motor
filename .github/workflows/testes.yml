@@ -52,5 +52,8 @@ jobs:
           echo "suítes com falha: $falhas"
           [ "$falhas" -eq 0 ] || exit 1
 
+      - name: Integração Docker de aceite (fixtures públicas, sem segredos)
+        run: python3 provar_aceite_container.py
+
       - name: Integração pública somente-leitura (requer rede)
         run: python3 teste-chat.py
