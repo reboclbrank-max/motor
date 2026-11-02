@@ -51,7 +51,8 @@ def coletar(fontes):
     if arg.lower() not in nome.lower() or nome in vistos:continue
     vistos.add(nome);selecionados.append({k:r.get(k) for k in ['id','name','status','conclusion','head_sha','html_url','created_at']})
    if not selecionados:raise RuntimeError('nenhuma execucao observada para o filtro')
-   texto='\n'.join(f"- {r['name']}: {r['conclusion'] or r['status']}; SHA `{r['head_sha']}`; {r['html_url']}" for r in selecionados)
+   import chat_componentes
+   texto=chat_componentes.apresentar(selecionados)
    resultados.append({'tipo':tipo,'argumento':arg,'fonte':'https://api.github.com'+api,'dados':selecionados,'relatorio':texto})
   else:
    repo,path=arg.split('/',1);base=f'/repos/reboclbrank-max/{repo}';head=C.gh('GET',base+'/git/ref/heads/main')['object']['sha'];d=C.gh('GET',base+f'/contents/{path}?ref={head}');b=base64.b64decode(d['content']);assert sha(b)==d['sha'];texto=b.decode('utf-8');url=f'https://github.com/reboclbrank-max/{repo}/blob/{head}/{path}'

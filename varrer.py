@@ -300,6 +300,12 @@ def main(processar_um=None, disparar=None):
         except Exception as e:
             # Sem dados privados no log; falha da agenda não concede poderes nem derruba o Chat.
             log('agenda de manutenção indisponível: '+type(e).__name__)
+    if processar_um is None and disparar is None and os.environ.get('GITHUB_ACTIONS')=='true':
+        try:
+            import chat_componentes
+            chat_componentes.executar()
+        except Exception as e:
+            log('autoaperfeiçoamento indisponível: '+type(e).__name__)
     processar_um = processar_um or processar
     disparar = disparar or acordar_de_novo
     diagnostico = {}
