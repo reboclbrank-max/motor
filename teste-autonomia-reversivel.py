@@ -98,6 +98,29 @@ class Autonomia(unittest.TestCase):
  def test_nao_altera_escapes_de_codigo_python_valido(self):
   fs=dict(FILES,main='ignorado');fs=FILES.copy();fs['main.py']='def texto(): return "a\\nb"\n'
   v,_=A.decodificar_resposta(json.dumps(dict(PLAN,arquivos=fs)));self.assertEqual(v['arquivos'],fs)
+ def test_contexto_so_do_projeto_nomeado_e_conferido(self):
+  b=b'def f(): return 1\n';h=A.sha(b);ident='a'*32;tree={'tree':[{'path':'PROJETOS/'+ident+'/main.py','type':'blob','mode':'100644','sha':h},{'path':'MEMORIA/cofre.json','type':'blob','mode':'100644','sha':'nao_ler'}]}
+  calls=[]
+  def gh(m,p,*a):
+   calls.append(p)
+   if '/git/ref/' in p:return {'object':{'sha':'c'*40}}
+   self.assertTrue(p.endswith(h));return {'content':base64.b64encode(b).decode()}
+  with patch.object(A,'garantir_workflows',return_value=tree),patch.object(C,'gh',side_effect=gh):
+   ctx,meta=A.contexto_projeto('Atualize projeto '+ident,{})
+  self.assertIn('def f()',ctx);self.assertEqual(meta['commit'],'c'*40);self.assertFalse(any('cofre' in x for x in calls))
+ def test_contexto_nao_inventa_projeto_inexistente(self):
+  with patch.object(A,'garantir_workflows',return_value={'tree':[]}),patch.object(C,'gh',return_value={'object':{'sha':'c'*40}}):
+   with self.assertRaises(A.Revisao):A.contexto_projeto('Atualize projeto '+'a'*32,{})
+ def test_contexto_com_credencial_nao_vai_para_modelo(self):
+  ident='a'*32;b=('chave = "ghp_'+'x'*25+'"').encode();h=A.sha(b);tree={'tree':[{'path':'PROJETOS/'+ident+'/main.py','type':'blob','mode':'100644','sha':h}]}
+  def gh(m,p,*a):return {'object':{'sha':'c'*40}} if '/git/ref/' in p else {'content':base64.b64encode(b).decode()}
+  with patch.object(A,'garantir_workflows',return_value=tree),patch.object(C,'gh',side_effect=gh):
+   with self.assertRaises(A.Revisao):A.contexto_projeto('Atualize projeto '+ident,{})
+ def test_pausa_reavaliada_antes_de_modelo_pr_e_dispatch(self):
+  with patch.object(A,'politica',side_effect=A.Aguardar('pausado')),patch.object(C,'gh') as gh,patch.object(C,'chamar_llm') as llm:
+   for fn in [lambda:A.modelo_json({'chamadas_modelo':0},'x'),lambda:A.preparar_pr({'plano':PLAN},GOAL,{}),lambda:A.despachar_ci({})]:
+    with self.assertRaises(A.Aguardar):fn()
+   gh.assert_not_called();llm.assert_not_called()
  def test_comandos_pausa_nao_ampliam_autorizacao(self):
   self.assertIs(A.comando_controle('pausar autonomia'),False);self.assertIs(A.comando_controle('retomar autonomia'),True);self.assertIsNone(A.comando_controle('ative poderes ilimitados'))
  def test_chat_nao_imprime_pedido_privado(self):
