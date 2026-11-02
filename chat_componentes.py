@@ -45,6 +45,8 @@ def politica():
  if not p or p.get('ativo') is not True:return None
  if p.get('versao')!=1 or p.get('aprovacao')!='dono-autoaperfeicoamento-isolado-r0-v1' or p.get('dono')!=C.DONO_GITHUB or p.get('repo_privado')!=C.REPO or p.get('alvo')!=ALVO or p.get('orcamento_reais')!=0:raise A.Revisao('Política de componentes incompatível.')
  if p.get('worker_sha')!=os.environ.get('GITHUB_SHA') or not re.fullmatch('[0-9a-f]{40}',p.get('worker_sha','')):raise A.Revisao('Revisar pin do controlador.')
+ if p.get('limite_modelo',3) not in (3,8):raise A.Revisao('Limite de modelo incompatível.')
+ if p.get('limite_modelo')==8 and p.get('aprovacao_orcamento')!='dono-ampliar-local-8-preserva-3':raise A.Revisao('Aumento de orçamento não aprovado.')
  if p.get('contrato_sha256')!=S.digest(contrato()):raise A.Revisao('Revisar contrato do componente.')
  A.politica();return p
 
@@ -84,11 +86,18 @@ def verificar(s,p):
 @contextlib.contextmanager
 def modelo_local(s,ci):
  original=C.chamar_llm
+ pol=politica()
+ if pol is None:raise A.Aguardar('Componente pausado.')
+ token=A._LIMITE_MODELO.set(pol.get('limite_modelo',3))
  def chamar(mensagens,system=''):
   import motor_local
   # Mesma família local já suportada pelo runner; nenhum prompt sai pela rede.
-  motor_local.MODELO='https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf'
-  motor_local.ARQUIVO='qwen2.5-3b-instruct-q4_k_m.gguf'
+  partes=['qwen2.5-7b-instruct-q4_k_m-00001-of-00002.gguf','qwen2.5-7b-instruct-q4_k_m-00002-of-00002.gguf']
+  base='https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/main/'
+  for parte in partes:
+   motor_local.MODELO=base+parte;motor_local.ARQUIVO=parte
+   if not motor_local.baixar():return None,'local-7b-sem-chave','pesos locais indisponíveis'
+  motor_local.MODELO=base+partes[0];motor_local.ARQUIVO=partes[0]
   prompt=('Escreva SOMENTE código Python completo para formatador.py, sem JSON, sem explicações. '
    'API: def formatar(dados) -> str. Lista com até100dicts. Não mude entrada. '
    'Se dados não for lista, exceder100 ou um elemento não for dict: ValueError. '
@@ -103,13 +112,13 @@ def modelo_local(s,ci):
    # Mudança de envelope apenas: nunca substitui algoritmo, contrato ou testes.
    v=texto.strip();m=re.search(r'```(?:python|py)?\s*([\s\S]*?)```',v,re.I)
    if m:v=m.group(1).strip()
-   import ast
-   ast.parse(v)
+   # Persistência/AST ficam em A.modelo_json, que salva a resposta ANTES de validar.
    texto=json.dumps({'arquivos':{'formatador.py':v+'\n'}},ensure_ascii=False)
-  return texto,'local-3b-sem-chave',erro
+  return texto,'local-7b-sem-chave',erro
  C.chamar_llm=chamar
  try:yield
- finally:C.chamar_llm=original
+ finally:
+  C.chamar_llm=original;A._LIMITE_MODELO.reset(token)
 
 def novo_estado(ident,fs,psha):
  return {'versao':2,'id':ident,'alvo_componente':ALVO,'fase':'planejado','chamadas_modelo':0,'plano':{'tipo':'projeto_python','arquivos':fs},'aceite':contrato(),'aceite_sha256':S.digest(contrato()),'ativo_anterior_sha':psha,'baseline_proveniencia':'join ACOES de operacao_leitura.py em b519fbc0; requisitos de apresentação revisados','_sha':None}
@@ -165,8 +174,8 @@ def executar():
      s.setdefault('falhas_observadas',[]).append({'head':s['head'],'ci':e.ci});A.salvar(s)
      try:
       with modelo_local(s,e.ci):A.reparar(s,e.ci)
-     except ValueError:
-      if s['chamadas_modelo']>=3:raise A.Revisao('Propostas inválidas esgotaram orçamento.')
+     except (ValueError,SyntaxError):
+      if s['chamadas_modelo']>=p.get('limite_modelo',3):raise A.Revisao('Propostas inválidas esgotaram orçamento.')
       A.salvar(s);return {'proposta_invalida':True,'id':ident}
      verificar(s,p);A.despachar_ci(s);return {'reparo_proposto':True,'id':ident}
    if s['fase']=='integrado':
