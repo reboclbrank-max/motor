@@ -41,3 +41,12 @@ exige revisão dos pins privados; este componente não pode mudá-los sozinho.
 É um ciclo real de autoaperfeiçoamento DENTRO de uma fronteira estreita, não autonomia
 universal. Não promete qualquer linguagem, correção semântica universal ou remoção
 das aprovações de gastos/credenciais/permissões/exclusões/publicações externas.
+
+## Ampliação posterior explicitamente aprovada
+Dono escolheu até8chamadas locais totais, preservando as3consumidas e sem resetar
+origem/contrato/histórico. Política exige aprovação literal adicional; padrão de
+projetos comuns continua3. ContextVar temporária somente no fluxo de componente;
+restaurada depois. Modelo local7B, mesma família/runner, sem prompt remoto ou nova
+credencial. Código inválido é journalado antes de AST; isso corrige a perda de
+diagnóstico da3ªtentativa, não a recria nem finge que foi preservada.2reparos de
+código válidos continuam o teto anterior, além da limitação total de chamadas.

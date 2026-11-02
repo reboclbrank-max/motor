@@ -47,7 +47,7 @@ class Componentes(unittest.TestCase):
   import motor_local
   s={'plano':{'arquivos':{'formatador.py':F.BASELINE}}};original=C.chamar_llm
   with patch.object(motor_local,'responder',return_value=('def formatar(dados):\n return \"\"',None)) as local:
-   with F.modelo_local(s,{'detalhes':'falha'}):self.assertEqual(C.chamar_llm([])[1],'local-3b-sem-chave')
+   with F.modelo_local(s,{'detalhes':'falha'}):self.assertEqual(C.chamar_llm([])[1],'local-7b-sem-chave')
    local.assert_called_once();self.assertIs(C.chamar_llm,original)
  def test_runtime_rollback_cas_sem_entregar_stdout(self):
   ativo={'versao_id':'x','anterior':None};self.db[F.ATIVO]=ativo;self.shas[F.ATIVO]='v'
@@ -86,4 +86,18 @@ class Componentes(unittest.TestCase):
   obs[0]['retorno']='texto falso'
   with patch.object(F,'arquivos',return_value={}),patch.object(F.E,'_container',return_value={'sucesso':True,'observacoes':obs}):
    with self.assertRaises(A.Revisao):F.rodar_ativo({},d)
+ def test_orcamento8_exige_aprovacao_e_restaura_contexto(self):
+  import motor_local
+  p=dict(self.p,limite_modelo=8,aprovacao_orcamento='dono-ampliar-local-8-preserva-3')
+  with patch.object(F,'politica',return_value=p),patch.object(motor_local,'responder',return_value=('def formatar(dados):return ""',None)):
+   self.assertEqual(A._LIMITE_MODELO.get(),3)
+   with F.modelo_local({'plano':{'arquivos':{'formatador.py':F.BASELINE}}},{}):self.assertEqual(A._LIMITE_MODELO.get(),8)
+   self.assertEqual(A._LIMITE_MODELO.get(),3)
+  with patch.object(A,'ler',return_value=(dict(self.p,limite_modelo=8),'x')),patch.dict(os.environ,{'GITHUB_SHA':'a'*40}):
+   with self.assertRaises(A.Revisao):REAL_POLITICA()
+ def test_codigo_invalido_tambem_e_encapsulado_para_journal(self):
+  import motor_local
+  with patch.object(motor_local,'responder',return_value=('def formatar(:',None)):
+   with F.modelo_local({'plano':{'arquivos':{'formatador.py':F.BASELINE}}},{}):
+    texto,_,_=C.chamar_llm([]);self.assertEqual(json.loads(texto)['arquivos']['formatador.py'],'def formatar(:\n')
 if __name__=='__main__':unittest.main()

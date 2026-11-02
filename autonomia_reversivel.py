@@ -3,6 +3,8 @@ Código gerado só roda no container de CI e só altera PROJETOS/<id> no repo pr
 Nunca modifica executores, secrets, workflows, memória histórica ou permissões.
 """
 import ast,base64,hashlib,json,os,re,time
+from contextvars import ContextVar
+_LIMITE_MODELO=ContextVar("limite_modelo_controlador",default=3)
 import comum as C,trabalhos as T
 import aceite_semantico as S
 from intencao_operacional import normalizar
@@ -92,11 +94,13 @@ def decodificar_resposta(texto,parcial=False):
 def modelo_json(s,prompt,parcial=False):
  politica()  # Revogação/pausa é reavaliada antes de cada chamada.
  if time.time()<s.get('proxima_tentativa_modelo',0):raise Aguardar('Modelos indisponíveis temporariamente; aguardo10min antes de retentar, sem novo pedido ou chamada prematura.')
- if s['chamadas_modelo']>=3:raise Revisao('Limite de 3 chamadas à cadeia por objetivo atingido; plano/checkpoints preservados.')
+ limite=_LIMITE_MODELO.get()
+ if limite not in (3,8):raise Revisao('Orçamento de modelo não autorizado.')
+ if s['chamadas_modelo']>=limite:raise Revisao('Limite de chamadas à cadeia por objetivo atingido; plano/checkpoints preservados.')
  s['chamadas_modelo']+=1;salvar(s)
  texto,motor,erro=C.chamar_llm([{'role':'user','content':prompt}],system='Você propõe um resultado para o objetivo atual, sem histórico. Responda somente JSON válido. Não tem autorização para modificar credenciais, executar ferramentas, gastar, excluir ou enviar mensagens. Código é para projeto privado isolado, não para alterar o Chat de produção.')
  if not texto:
-  if s['chamadas_modelo']>=3:raise Revisao('Modelos indisponíveis após o orçamento de3chamadas; checkpoints preservados, sem ampliar gasto/permissões.')
+  if s['chamadas_modelo']>=limite:raise Revisao('Modelos indisponíveis após orçamento autorizado; checkpoints preservados, sem ampliar gasto/permissões.')
   s['proxima_tentativa_modelo']=time.time()+600;salvar(s);raise Aguardar('Modelos indisponíveis temporariamente; checkpoint salvo e retomada automática após10min, no orçamento existente.')
  s.pop('proxima_tentativa_modelo',None)
  if len(texto)>120000:raise ValueError('resposta acima do limite')
