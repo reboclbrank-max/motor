@@ -2,7 +2,7 @@
 Código gerado só roda no container de CI e só altera PROJETOS/<id> no repo privado.
 Nunca modifica executores, secrets, workflows, memória histórica ou permissões.
 """
-import base64,hashlib,json,os,re,time
+import ast,base64,hashlib,json,os,re,time
 import comum as C,trabalhos as T
 from intencao_operacional import normalizar
 from execucao_isolada import validar_arquivos
@@ -63,6 +63,30 @@ def salvar(s):
  s.pop('_ultima_resposta',None)
  old=s.pop('_sha',None);s['_sha']=gravar(C.REPO,estado_path(s['id']),s,old);return s
 
+def decodificar_resposta(texto):
+ """Normaliza apresentação, não permissões. Resposta bruta fica no privado."""
+ notas=[];texto=texto.strip();m=re.search(r'```(?:json)?\s*(\{.*?\})\s*```',texto,re.S|re.I)
+ if m:texto=m.group(1);notas.append('envelope_markdown_removido')
+ v,fim=json.JSONDecoder().raw_decode(texto)
+ if texto[fim:].strip():notas.append('pos_texto_ignorado_sem_autoridade')
+ if not isinstance(v,dict):raise ValueError('proposta precisa ser objeto')
+ tipo=v.get('tipo')
+ for campo in ('pesquisa','documento'):
+  if campo in v and isinstance(v[campo],str) and len(v[campo])<=4000:
+   if tipo=='pesquisa' and campo=='pesquisa' and 'consulta' not in v:v['consulta']=v[campo]
+   elif tipo=='documento' and campo=='documento' and 'texto' not in v:v['texto']=v[campo]
+   v.pop(campo);notas.append('ramo_textual_normalizado:'+campo)
+ if isinstance(v.get('arquivos'),dict):
+  validar_arquivos(v['arquivos'])
+  for n,t in v['arquivos'].items():
+   if not n.endswith('.py'):continue
+   try:ast.parse(t,filename=n)
+   except SyntaxError:
+    if '\n' not in t and '\\n' in t:
+     candidato=t.replace('\\n','\n').replace('\\t','\t');ast.parse(candidato,filename=n);v['arquivos'][n]=candidato;notas.append('fonte_duplamente_escapada:'+n)
+    else:raise
+ return v,notas
+
 def modelo_json(s,prompt):
  if s['chamadas_modelo']>=3:raise Revisao('Limite de 3 chamadas à cadeia por objetivo atingido; plano/checkpoints preservados.')
  s['chamadas_modelo']+=1;salvar(s)
@@ -72,10 +96,8 @@ def modelo_json(s,prompt):
  s['ultima_proposta']=RAIZ+'/'+s['id']+'/propostas/'+str(s['chamadas_modelo'])+'.json'
  gravar(C.REPO,s['ultima_proposta'],{'texto':texto,'motor':motor})
  s['_ultima_resposta']=texto
- texto=texto.strip()
- if texto.startswith('```json') and texto.endswith('```'):texto=texto[7:-3].strip()
- v=json.loads(texto)
- if not isinstance(v,dict):raise ValueError('proposta precisa ser objeto')
+ v,notas=decodificar_resposta(texto)
+ if notas:s.setdefault('normalizacoes_proposta',[]).append({'tentativa':s['chamadas_modelo'],'itens':notas})
  s['motor']=motor;return v
 
 def validar_plano(v):

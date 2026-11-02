@@ -31,3 +31,5 @@ A política não cria nova conta, cron, segredo, serviço pago ou infraestrutura
 
 ## O que não se promete
 Não é autonomia ilimitada ou garantia semântica universal. CI e testes podem ser insuficientes; modelo pode errar e fontes podem falhar. Recibo de entrega significa resultado tecnicamente observado para revisão. Container é isolamento operacional, não prova de invulnerabilidade do kernel. Projetos internos não são silenciosamente implantados como Chat de produção. Objetivos históricos/finais não são reabertos. Logs novos não imprimem o texto privado do pedido, código ou saída do container.
+
+Propostas brutas e erros ficam privados. A normalização aceita envelope JSON em Markdown e pós-texto sem autoridade, descarta somente ramos textuais conhecidos inativos e desfaz uma camada de escapes de arquivo inteiro somente se o original falhar no parser e o candidato passar. Não muda caminhos, comandos, política ou testes. Campos de efeito desconhecidos continuam rejeitados; AST não executa o código nem substitui CI.
