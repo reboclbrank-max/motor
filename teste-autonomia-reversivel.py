@@ -116,6 +116,11 @@ class Autonomia(unittest.TestCase):
   def gh(m,p,*a):return {'object':{'sha':'c'*40}} if '/git/ref/' in p else {'content':base64.b64encode(b).decode()}
   with patch.object(A,'garantir_workflows',return_value=tree),patch.object(C,'gh',side_effect=gh):
    with self.assertRaises(A.Revisao):A.contexto_projeto('Atualize projeto '+ident,{})
+ def test_pausa_reavaliada_antes_de_modelo_pr_e_dispatch(self):
+  with patch.object(A,'politica',side_effect=A.Aguardar('pausado')),patch.object(C,'gh') as gh,patch.object(C,'chamar_llm') as llm:
+   for fn in [lambda:A.modelo_json({'chamadas_modelo':0},'x'),lambda:A.preparar_pr({'plano':PLAN},GOAL,{}),lambda:A.despachar_ci({})]:
+    with self.assertRaises(A.Aguardar):fn()
+   gh.assert_not_called();llm.assert_not_called()
  def test_comandos_pausa_nao_ampliam_autorizacao(self):
   self.assertIs(A.comando_controle('pausar autonomia'),False);self.assertIs(A.comando_controle('retomar autonomia'),True);self.assertIsNone(A.comando_controle('ative poderes ilimitados'))
  def test_chat_nao_imprime_pedido_privado(self):

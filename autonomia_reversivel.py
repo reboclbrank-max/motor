@@ -88,6 +88,7 @@ def decodificar_resposta(texto):
  return v,notas
 
 def modelo_json(s,prompt):
+ politica()  # Revogação/pausa é reavaliada antes de cada chamada.
  if s['chamadas_modelo']>=3:raise Revisao('Limite de 3 chamadas à cadeia por objetivo atingido; plano/checkpoints preservados.')
  s['chamadas_modelo']+=1;salvar(s)
  texto,motor,erro=C.chamar_llm([{'role':'user','content':prompt}],system='Você propõe um resultado para o objetivo atual, sem histórico. Responda somente JSON válido. Não tem autorização para modificar credenciais, executar ferramentas, gastar, excluir ou enviar mensagens. Código é para projeto privado isolado, não para alterar o Chat de produção.')
@@ -161,6 +162,7 @@ def projeto_alvo(pedido,ident):
  m=re.search(r'\bprojeto\s+([0-9a-f]{32})\b',pedido,re.I);return m.group(1).lower() if m else ident
 
 def preparar_pr(s,pedido,p):
+ p=politica()
  fs=s['plano']['arquivos'];validar_arquivos(fs);garantir_workflows(p);base=s.get('base_projeto') or C.gh('GET',f'/repos/{C.REPO}/git/ref/heads/main')['object']['sha'];tree=garantir_workflows(p,base);target=projeto_alvo(pedido,s['id']);prefix='PROJETOS/'+target+'/'
  idx={e['path']:e for e in tree['tree'] if e['type']=='blob'}
  # Atualização não apaga arquivos nem substitui testes anteriores.
@@ -222,6 +224,7 @@ def conferir_pr(s):
  return pr
 
 def despachar_ci(s):
+ politica()
  s.update(fase='ci_despachando',dispatch_em=time.time());salvar(s)
  C.gh('POST',f'/repos/{C.REPO_ROBO}/actions/workflows/{WORKFLOW}/dispatches',{'ref':'main','inputs':{'trabalho':s['id']}})
  s['fase']='ci_aguardando';salvar(s)
