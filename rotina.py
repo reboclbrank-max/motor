@@ -129,6 +129,7 @@ def principal():
     if modo not in ("manha", "noite"):
         modo = "manha" if C.agora().hour < 15 else "noite"
     titulo, corpo = montar_rotina(modo)
+    corpo = "🤖 " + corpo.lstrip() + "\n\n<!--robo:rotina-->"
     C.log(f"rotina {modo}:\n{titulo}")
     try:
         issue = C.gh("POST", f"/repos/{C.REPO}/issues",

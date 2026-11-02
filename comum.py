@@ -2128,7 +2128,7 @@ def notificar(titulo, texto, dados=None, tipo="aviso", dedupe_min=90):
             return []
         # a trava fica presa a janela inteira de propósito: assim uma execução que comece
         # poucos segundos depois também é barrada (a limpeza é feita pelo vigia depois)
-    corpo = (f"@{DONO_GITHUB} — aviso automático do assistente.\n\n"
+    corpo = (f"🤖 @{DONO_GITHUB} — aviso automático do assistente.\n\n"
              f"### {titulo}\n\n{texto}\n\n---\n"
              "_Você recebe isto pela menção (e-mail/app do GitHub). "
              "Para receber também no Telegram (grátis), veja o passo a passo no COMECE-AQUI._")

@@ -22,6 +22,7 @@ MISSOES = [
 
 
 def postar(corpo):
+    corpo = "🤖 " + corpo + "\n\n<!--robo:inspire-->"
     req = urllib.request.Request(
         f"https://api.github.com/repos/{comum.REPO}/issues/{ISSUE}/comments",
         data=json.dumps({"body": corpo}).encode(), method="POST",
