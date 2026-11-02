@@ -48,11 +48,16 @@ def comparar(v,observados):
 # Cada chamada de função/CLI roda num subprocesso; expectativas ficam no host.
 FUNCAO = """import json,sys,importlib,contextlib,io
 c=json.loads(sys.stdin.read());args=c['args'];kwargs=c.get('kwargs',{})
-try:
- with contextlib.redirect_stdout(io.StringIO()):
-  sys.path.insert(0,'/projeto');f=getattr(importlib.import_module(c['modulo']),c['funcao']);o={'retorno':f(*args,**kwargs)}
-  json.dumps(o,allow_nan=False)
-except Exception as e:o={'erro':type(e).__name__}
+with contextlib.redirect_stdout(io.StringIO()):
+ try:
+  sys.path.insert(0,'/projeto');f=getattr(importlib.import_module(c['modulo']),c['funcao'])
+ except Exception as e:o={'falha_estrutura':'importacao '+type(e).__name__}
+ else:
+  try:o={'retorno':f(*args,**kwargs)}
+  except Exception as e:o={'erro':type(e).__name__}
+  else:
+   try:json.dumps(o,allow_nan=False)
+   except Exception as e:o={'falha_estrutura':'retorno nao JSON '+type(e).__name__}
 o.update(args_depois=args,kwargs_depois=kwargs)
 print(json.dumps(o,allow_nan=False))
 """
@@ -73,4 +78,4 @@ print('RESULTADO_CI:'+json.dumps({'sucesso':True,'testes':len(observados),'obser
 """
 
 def harness(v):
- return HARNESS.replace('PAYLOAD',repr(json.dumps(chamadas(v),ensure_ascii=False,allow_nan=False))).replace('FUNCAO',repr(FUNCAO))
+ return HARNESS.replace('FUNCAO',repr(FUNCAO)).replace('PAYLOAD',repr(json.dumps(chamadas(v),ensure_ascii=False,allow_nan=False)))

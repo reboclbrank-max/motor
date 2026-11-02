@@ -58,6 +58,14 @@ class Aceite(unittest.TestCase):
   with self.assertRaises(ValueError):S.validar(v,FS)
   v['casos'][0]={'etapa':1,'script':'main.py','esperado':'x','shell':'bash'}
   with self.assertRaises(ValueError):S.validar(v,FS)
+ def test_marcadores_no_dado_nao_sao_template(self):
+  v=copy.deepcopy(CON);v['casos'][0]['args']=[['FUNCAO','PAYLOAD']]
+  tree=__import__('ast').parse(S.harness(v));assign=next(n for n in tree.body if isinstance(n,__import__('ast').Assign));self.assertEqual(json.loads(assign.value.args[0].value),S.chamadas(v))
+ def test_erro_de_importacao_ou_serializacao_nao_e_excecao_da_funcao(self):
+  v=copy.deepcopy(CON);v['casos'][0].pop('esperado');v['casos'][0]['erro']='ValueError'
+  for src in ['raise ValueError("importacao")\ndef contar(xs):return 0\n','def contar(xs):return float("nan")\n','def contar(xs):raise ValueError("entrada")\n']:
+   with tempfile.TemporaryDirectory() as td:
+    pathlib.Path(td,'main.py').write_text(src);r=subprocess.run([sys.executable,'-c',S.harness(v).replace('/projeto',td)],capture_output=True,text=True,timeout=5);raw=json.loads(r.stdout.split('RESULTADO_CI:')[1]);self.assertEqual(S.comparar(v,raw['observacoes'])['sucesso'],'raise ValueError("entrada")' in src)
  def test_atualizar_reconhecido(self):
   self.assertTrue(A.eh_objetivo('Atualize projeto '+'a'*32));self.assertTrue(A.eh_objetivo('Atualizar projeto '+'a'*32))
  def test_teto_de_chamadas_preservado(self):
