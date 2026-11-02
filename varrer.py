@@ -87,7 +87,18 @@ def _do_robo(corpo):
     texto = (corpo or "").lstrip()
     if "<!--resp:" in texto or C.MARCA_DO_ROBO in texto:
         return True
+    if texto.startswith(f"@{C.DONO_GITHUB} — aviso automático do assistente.\n\n") and texto.endswith("Para receber também no Telegram (grátis), veja o passo a passo no COMECE-AQUI._"):
+        return True  # formato emitido pelo notificador anterior à marca do robô
+    if (texto.startswith("🌅 **Turno autônomo ") or texto.startswith("🌙 **Sonho da noite**")) and ("\n**Missão de hoje:**" in texto and "_(🤖 eu acordei sozinha hoje · " in texto or "— acordei, mas o motor não respondeu (`" in texto):
+        return True
     return texto.startswith("🤖") or texto.startswith(C.ASSINATURA)
+
+
+def _rotina_legada(issue, comentario):
+    # Só a abertura automática. Comentários humanos na mesma conversa continuam pedidos.
+    if comentario is not None:return False
+    titulo=issue.get('title') or '';body=issue.get('body') or ''
+    return titulo.startswith(('📋 Rotina da manhã — ','📋 Rotina da noite — ')) and all(x in body for x in ('### 🌐 Tudo no ar?', '### 🌤 Clima', '### 🔔 Avisos e lembretes'))
 
 
 def _do_dono(usuario):
@@ -162,7 +173,7 @@ def pendentes(limite_dias=None, diagnostico=None):
                 if diagnostico is not None:
                     diagnostico["nao_do_dono"] += 1
                 continue
-            if _do_robo(mensagem.get("body")):
+            if _do_robo(mensagem.get("body")) or _rotina_legada(issue, comentario):
                 if diagnostico is not None:
                     diagnostico["ignoradas_do_robo"] += 1
                 continue
