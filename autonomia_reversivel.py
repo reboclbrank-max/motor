@@ -40,12 +40,14 @@ def politica():
 
 def eh_objetivo(pedido):
  s=normalizar(str(pedido or '').strip());s=re.sub(r'^(por favor[, ]+|pode |quero que voce |quero que )','',s)
- return bool(re.match(r'^(crie|criar|desenvolva|implemente|prepare|pesquise|investigue|organize|resuma|resolva|corrija|melhore|automatize|faca|termine|elabore|produza)\b',s))
+ if re.fullmatch(r'(?:faca|resolva)\s+(?:(?:a )?conta\s+)?[0-9\s()+*/^%=.,?!-]+',s):return False
+ return bool(re.match(r'^(crie|criar|desenvolva|implemente|prepare|pesquise|investigue|organize|resuma|resolva|corrija|melhore|automatize|faca|termine|elabore|produza|transforme)\b',s))
 
 def proteger_pedido(pedido):
  s=normalizar(pedido)
  s=re.sub(r'\b(?:nao|sem)\b[^,;.\n]*','',s)
  if re.search(r'\b(envie|enviar|publique|publicar|poste|postar|compre|comprar|pague|pagar|contrate|contratar|apague|apagar|exclua|excluir|remova|remover|revogue|revogar)\b',s):raise Revisao('Gasto, exclusão ou comunicação/publicação externa exige aprovação específica; nenhuma dessas ações foi executada.')
+ if re.search(r'\b(corrija|melhore|atualize|modifique|transforme|implante)\b.*\b(chat|motor|site)\b',s) and not re.search(r'\bprojeto\s+[0-9a-f]{32}\b',s):raise Revisao('Alterar produção da casa exige revisão de segurança; não substituir isso por um projeto isolado e fingir conclusão.')
  if re.search(r'\b(credencial|credenciais|segredo|secrets|pat_memoria|token administrativo)\b|\.github/|\b(comum|responder|varrer|casa|autonomia_reversivel)\.py\b',s):raise Revisao('Mudança que pode afetar credenciais, executores ou travas exige revisão de segurança.')
  if re.search(r'(?i)(gh[pousr]_[A-Za-z0-9]{15,}|github_pat_|sk-[A-Za-z0-9]{15,}|-----BEGIN .*PRIVATE KEY|senha\s*[:=]|password\s*[:=])',pedido):raise Revisao('Possível credencial na mensagem; não encaminhei o objetivo ao modelo nem a projeto.')
 
