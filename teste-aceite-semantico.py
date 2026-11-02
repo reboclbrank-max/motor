@@ -97,6 +97,20 @@ class Fluxo(unittest.TestCase):
    state=self.state()
    with self.assertRaises(A.Revisao):REAL_PREPARAR(state,self.goal)
    self.assertEqual(state['chamadas_modelo'],3);pr.assert_not_called();self.assertNotIn('aceite',state)
+ def test_modelo_indisponivel_retenta_com_backoff_sem_chamada_prematura(self):
+  with T.contexto_mensagem(123,'a123',self.goal),patch.object(C,'chamar_llm',side_effect=[(None,None,'quota'),(json.dumps(CON_SOMA),'fixture',None)]) as llm:
+   state=self.state()
+   with self.assertRaises(A.Aguardar):A.modelo_json(state,'x')
+   self.assertEqual(state['chamadas_modelo'],2);self.assertTrue(A.aguardando_ci(123,'a123',self.goal))
+   with self.assertRaises(A.Aguardar):A.modelo_json(state,'x')
+   self.assertEqual(llm.call_count,1)
+   with patch.object(A.time,'time',return_value=state['proxima_tentativa_modelo']+1):self.assertEqual(A.modelo_json(state,'x'),CON_SOMA)
+   self.assertEqual(state['chamadas_modelo'],3);self.assertNotIn('proxima_tentativa_modelo',state)
+ def test_ultima_indisponibilidade_nao_aumenta_orcamento(self):
+  with T.contexto_mensagem(123,'a123',self.goal),patch.object(C,'chamar_llm',return_value=(None,None,'quota')):
+   state=self.state();state['chamadas_modelo']=2
+   with self.assertRaises(A.Revisao):A.modelo_json(state,'x')
+   self.assertEqual(state['chamadas_modelo'],3);self.assertNotIn('proxima_tentativa_modelo',state)
  def test_reparo_usa_falha_real_mantem_contrato_e_testes(self):
   old_api=C.gh
   def api(m,path,d=None):

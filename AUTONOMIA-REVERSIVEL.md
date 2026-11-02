@@ -72,3 +72,9 @@ infalível. Casos derivados por LLM podem omitir/reinterpretar requisitos; compa
 é independente do veredito do código, não prova universal da intenção do usuário.
 Autonomia técnica ampliada não é agenda empresarial autoinventada, qualquer linguagem
 ou autonomia irrestrita. Continua dependendo de Actions, modelos e quotas existentes.
+
+Indisponibilidade temporária da cadeia não bloqueia terminalmente na primeira falha:
+checkpoint com backoff10min e retomada pela varredura já existente. Não chama modelo
+antes do prazo, não cria loop de auto-dispatch nem cron novo. Continua contando no
+mesmo orçamento de3chamadas e só bloqueia ao esgotá-lo. Essa recuperação tem testes
+de contrato com relógio/API simulados; não se provoca indisponibilidade de provedor real.

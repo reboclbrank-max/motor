@@ -90,10 +90,14 @@ def decodificar_resposta(texto):
 
 def modelo_json(s,prompt):
  politica()  # Revogação/pausa é reavaliada antes de cada chamada.
+ if time.time()<s.get('proxima_tentativa_modelo',0):raise Aguardar('Modelos indisponíveis temporariamente; aguardo10min antes de retentar, sem novo pedido ou chamada prematura.')
  if s['chamadas_modelo']>=3:raise Revisao('Limite de 3 chamadas à cadeia por objetivo atingido; plano/checkpoints preservados.')
  s['chamadas_modelo']+=1;salvar(s)
  texto,motor,erro=C.chamar_llm([{'role':'user','content':prompt}],system='Você propõe um resultado para o objetivo atual, sem histórico. Responda somente JSON válido. Não tem autorização para modificar credenciais, executar ferramentas, gastar, excluir ou enviar mensagens. Código é para projeto privado isolado, não para alterar o Chat de produção.')
- if not texto:raise Revisao('Nenhum modelo disponível para propor este objetivo; checkpoint preservado.')
+ if not texto:
+  if s['chamadas_modelo']>=3:raise Revisao('Modelos indisponíveis após o orçamento de3chamadas; checkpoints preservados, sem ampliar gasto/permissões.')
+  s['proxima_tentativa_modelo']=time.time()+600;salvar(s);raise Aguardar('Modelos indisponíveis temporariamente; checkpoint salvo e retomada automática após10min, no orçamento existente.')
+ s.pop('proxima_tentativa_modelo',None)
  if len(texto)>120000:raise ValueError('resposta acima do limite')
  s['ultima_proposta']=RAIZ+'/'+s['id']+'/propostas/'+str(s['chamadas_modelo'])+'.json'
  gravar(C.REPO,s['ultima_proposta'],{'texto':texto,'motor':motor})
@@ -330,7 +334,7 @@ def aguardando_ci(numero,marca,pedido):
   p,_=ler(POLITICA_REPO,POLITICA_PATH)
   if p and p.get('ativo') is False:return eh_objetivo(pedido)
   s,_=ler(C.REPO,estado_path(T.id_da_origem()))
-  return bool(s and s.get('pedido_sha256')==hashlib.sha256(pedido.encode()).hexdigest() and s.get('fase') in ('ci_despachando','ci_aguardando','projeto_preparando','pr_criada'))
+  return bool(s and s.get('pedido_sha256')==hashlib.sha256(pedido.encode()).hexdigest() and (s.get('fase') in ('ci_despachando','ci_aguardando','projeto_preparando','pr_criada') or s.get('proxima_tentativa_modelo',0)>time.time()))
 
 
 def comando_controle(pedido):
