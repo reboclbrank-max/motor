@@ -46,8 +46,8 @@ class Componentes(unittest.TestCase):
  def test_modelo_somente_local_nao_cadeia_remota(self):
   import motor_local
   s={'plano':{'arquivos':{'formatador.py':F.BASELINE}}};original=C.chamar_llm
-  with patch.object(motor_local,'responder',return_value=('{}',None)) as local:
-   with F.modelo_local(s,{'detalhes':'falha'}):self.assertEqual(C.chamar_llm([])[1],'local-isolado-sem-chave')
+  with patch.object(motor_local,'responder',return_value=('def formatar(dados):\n return \"\"',None)) as local:
+   with F.modelo_local(s,{'detalhes':'falha'}):self.assertEqual(C.chamar_llm([])[1],'local-3b-sem-chave')
    local.assert_called_once();self.assertIs(C.chamar_llm,original)
  def test_runtime_rollback_cas_sem_entregar_stdout(self):
   ativo={'versao_id':'x','anterior':None};self.db[F.ATIVO]=ativo;self.shas[F.ATIVO]='v'

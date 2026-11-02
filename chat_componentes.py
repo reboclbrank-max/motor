@@ -86,15 +86,27 @@ def modelo_local(s,ci):
  original=C.chamar_llm
  def chamar(mensagens,system=''):
   import motor_local
-  prompt=('Corrija formatador.py. Retorne SOMENTE JSON {"arquivos":{"formatador.py":"código Python completo"}}. '
-   'API: formatar(dados) retorna str. Não mude testes. Lista de até100dicts; estrutura inválida ou campo não textual gera ValueError. '
-   'Cada linha: - NOME: STATUS; SHA `SHA`; URL. Junte com newline, lista vazia string vazia. '
-   'Valores falsos/ausentes: name="sem nome", conclusion ou status ou "desconhecido", head_sha e html_url="não informado". '
-   'Escape Markdown com barra antes de cada um destes caracteres: barra invertida, crase, asterisco, underscore, chaves, colchetes, parênteses, menor/maior, #, !, |. '
-   'Quebra de linha/retorno vira espaço. Não altere entrada, não importe/comunique fora. '
-   'Fonte atual: '+s['plano']['arquivos']['formatador.py'][:1100]+' Falha real: '+str(ci.get('detalhes',''))[-650:])
-  texto,erro=motor_local.responder(prompt[:2100],system='Você corrige um componente Python isolado. Somente JSON válido, sem explicação.',max_tokens=900)
-  return texto,'local-isolado-sem-chave',erro
+  # Mesma família local já suportada pelo runner; nenhum prompt sai pela rede.
+  motor_local.MODELO='https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf'
+  motor_local.ARQUIVO='qwen2.5-3b-instruct-q4_k_m.gguf'
+  prompt=('Escreva SOMENTE código Python completo para formatador.py, sem JSON, sem explicações. '
+   'API: def formatar(dados) -> str. Lista com até100dicts. Não mude entrada. '
+   'Se dados não for lista, exceder100 ou um elemento não for dict: ValueError. '
+   'Para cada dict obtenha valores: name ou "sem nome"; conclusion ou status ou "desconhecido"; head_sha ou "não informado"; html_url ou "não informado". '
+   'Cada um desses4valores precisa ser str com até1000caracteres, senão ValueError. '
+   'Escape cada valor caractere a caractere: newline e carriage-return viram espaço; antes de barra invertida, crase, asterisco, underscore, chaves, colchetes, parênteses, menor, maior, #, ! e | coloque barra invertida. '
+   'Cada linha EXATA: - NOME: STATUS; SHA `SHA`; URL. Use os4valores escapados. '
+   'Junte as linhas com newline. Lista vazia retorna string vazia. Acentos preservados. '
+   'Não imprima nada, não execute ferramentas. Código anterior (dados):\n'+s['plano']['arquivos']['formatador.py'][:600])
+  texto,erro=motor_local.responder(prompt,system='Você escreve código Python válido, completo e conciso. Retorne somente o código.',max_tokens=1100)
+  if texto:
+   # Mudança de envelope apenas: nunca substitui algoritmo, contrato ou testes.
+   v=texto.strip();m=re.search(r'```(?:python|py)?\s*([\s\S]*?)```',v,re.I)
+   if m:v=m.group(1).strip()
+   import ast
+   ast.parse(v)
+   texto=json.dumps({'arquivos':{'formatador.py':v+'\n'}},ensure_ascii=False)
+  return texto,'local-3b-sem-chave',erro
  C.chamar_llm=chamar
  try:yield
  finally:C.chamar_llm=original
@@ -145,7 +157,9 @@ def executar():
     recibo,_=A.ler(C.REPO,A.RAIZ+'/'+ident+'/ci/'+s['head']+'.json')
     if recibo:
      run=C.gh('GET',f'/repos/{C.REPO_ROBO}/actions/runs/'+str(recibo['run_id']))
-     if run.get('head_sha')!=p['worker_sha']:raise A.Revisao('CI executou outro controlador.')
+     if run.get('head_sha')!=p['worker_sha']:
+      legado=p.get('baseline_ci_aprovada',{})
+      if not (recibo.get('sucesso') is False and run.get('id')==legado.get('run_id') and run.get('head_sha')==legado.get('worker_sha') and recibo.get('head')==legado.get('head_projeto')):raise A.Revisao('CI executou outro controlador.')
     try:A.integrar(s,A.politica())
     except A.FalhaCI as e:
      s.setdefault('falhas_observadas',[]).append({'head':s['head'],'ci':e.ci});A.salvar(s)
