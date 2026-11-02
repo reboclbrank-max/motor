@@ -1,4 +1,4 @@
-"""Agenda determinística de manutenção. Política privada; nenhum modelo/segredo é lido.
+"""Agenda determinística de manutenção. Política privada, sem LLM; transporte autenticado já existente.
 Acorda no worker existente. Não escreve código, não publica mensagens fora do privado,
 não cria contas, não envia e-mail e não escolhe workflows a partir de texto livre.
 """
@@ -24,6 +24,7 @@ def politica():
  return p
 
 def guardar(p):
+ if C.gh('GET',f'/repos/{C.REPO_ROBO}/git/ref/heads/main')['object']['sha']!=p['worker_sha']:raise A.Revisao('Main mudou; revisar pin antes de efeitos da agenda.')
  if politica()!=p:raise A.Revisao('Política mudou; interromper agenda.')
  A.garantir_workflows(A.politica())
 

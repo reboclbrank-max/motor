@@ -13,6 +13,7 @@ class Agenda(unittest.TestCase):
   for target,name,kw in [(M,'politica',{'return_value':self.p}),(A,'politica',{'return_value':{}}),(A,'garantir_workflows',{'return_value':{}}),(A,'ler',{'side_effect':ler}),(A,'gravar',{'side_effect':gravar}),(M.time,'time',{'side_effect':lambda:self.now}),(C,'gh',{'side_effect':self.api}),(C,'chamar_llm',{'side_effect':AssertionError('modelo proibido na agenda')})]:
    p=patch.object(target,name,**kw);p.start();self.addCleanup(p.stop)
  def api(self,m,path,d=None):
+  if m=='GET' and path.endswith('/git/ref/heads/main'):return {'object':{'sha':self.p['worker_sha']}}
   if m=='GET' and '/actions/runs?' in path:return {'workflow_runs':copy.deepcopy(self.runs)}
   if m=='GET' and '/issues?state=all' in path:return copy.deepcopy(self.issues)
   if m=='GET' and '/comments?' in path:return copy.deepcopy(self.comments)
@@ -67,6 +68,14 @@ class Agenda(unittest.TestCase):
  def test_ci_sem_recibo_tem_retomada_controlada(self):
   r=self.runmeta(path=M.CI,conclusion='failure',display_title='Projeto '+'c'*32);st={'fase':'ci_aguardando','dispatch_em':self.now-10,'head':'d'*40}
   with patch.object(A,'ler',side_effect=[(st,'x'),(None,None)]),patch.object(A,'conferir_pr'):self.assertTrue(M.seguro_retomar(r,self.p))
+ def test_main_mudou_antes_de_efeitos_interrompe(self):
+  old=self.api
+  def api(m,path,d=None):
+   if path.endswith('/git/ref/heads/main'):return {'object':{'sha':'b'*40}}
+   return old(m,path,d)
+  with patch.object(C,'gh',side_effect=api):
+   with self.assertRaises(A.Revisao):M.executar()
+  self.assertFalse(self.effects);self.assertEqual(self.writes,0)
  def test_politica_mudou_antes_do_efeito_interrompe(self):
   with patch.object(M,'politica',side_effect=[self.p,dict(self.p,ativo=False)]):
    with self.assertRaises(A.Revisao):M.executar()
