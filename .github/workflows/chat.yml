@@ -100,6 +100,7 @@ jobs:
           python3 rodar-contratos-offline.py teste-planejamento-operacional.py
           python3 rodar-contratos-offline.py teste-intencao-operacional.py
           python3 rodar-contratos-offline.py teste-autorizacao-efeitos.py
+          python3 rodar-contratos-offline.py teste-autonomia-reversivel.py
 
       - name: Baixar a memória do repositório privado
         env:

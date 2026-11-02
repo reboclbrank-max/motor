@@ -23,6 +23,8 @@ import time
 import comum as C
 import responder
 
+ADIADO = object()  # Progresso persistido, não entrega nem erro.
+
 def comentarios_verificados(numero):
     """Consulta todas as páginas; falha não é lista vazia."""
     pagina, todos = 1, []
@@ -227,7 +229,12 @@ def _processar(issue, comentario):
             codigo = e.code
         if codigo not in (None, 0):
             return False
-        return entrega_confirmada(numero, marca, True) if operacional else entrega_confirmada(numero, marca)
+        confirmado=entrega_confirmada(numero, marca, True) if operacional else entrega_confirmada(numero, marca)
+        if not confirmado:
+            import autonomia_reversivel as A
+            pedido=(comentario or issue).get('body','').strip()
+            if A.eh_objetivo(pedido) and A.aguardando_ci(numero,marca,pedido):return ADIADO
+        return confirmado
     except Exception as e:
         log(f"conversa #{numero}: falhou ({type(e).__name__}: {str(e)[:120]})")
         return False
@@ -293,23 +300,24 @@ def main(processar_um=None, disparar=None):
     limite = MAX_POR_RODADA if MAX_POR_RODADA > 0 else len(lista)
     lote = lista[:limite]
     log(f"{len(lista)} pendente(s); lote disponível: {len(lote)}")
-    feitas, tentadas = 0, 0
+    feitas, tentadas, adiadas = 0, 0, 0
     inicio = time.monotonic()
     for issue, comentario in lote:
         if tentadas and time.monotonic() - inicio >= ORCAMENTO_RODADA_S:
             log("orçamento da execução atingido; pendências permanecem no canal")
             break
         tentadas += 1
-        if processar_um(issue, comentario):
-            feitas += 1
-    restantes = len(lista) - feitas
-    log(f"entregas confirmadas {feitas}; tentadas {tentadas}; pendentes {restantes}")
+        resultado=processar_um(issue, comentario)
+        if resultado is ADIADO:adiadas += 1
+        elif resultado:feitas += 1
+    restantes = len(lista) - feitas - adiadas
+    log(f"entregas confirmadas {feitas}; aguardando CI/pausa {adiadas}; tentadas {tentadas}; pendentes executáveis {restantes}")
     if restantes > 0 and feitas > 0:
         if not disparar(f"faltam {restantes}"):
             return 2
     elif restantes > 0:
         log("sem progresso confirmado: não criar laço de execuções")
-    return 1 if feitas < tentadas else 0
+    return 1 if feitas + adiadas < tentadas else 0
 
 
 

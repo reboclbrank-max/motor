@@ -793,6 +793,31 @@ def responder_operacao_leitura(numero,texto,marca):
         return 1
 
 
+
+def responder_autonomia(numero,texto,marca):
+    import autonomia_reversivel as A
+    try:
+        if A.comando_controle(texto) is not None:
+            responder(numero,A.controlar(texto),marca)
+            return 0
+        recibo=A.executar(texto)
+        resposta="Execução interna concluída no escopo autorizado; resultado conferido tecnicamente e disponível para revisão.\n\n"+recibo+"\n\n<!--entrega-autonomia-verificada:"+marca+"-->"
+        if not ja_respondida(numero,marca):responder(numero,resposta,marca)
+        if not ja_respondida(numero,marca):raise RuntimeError('entrega não confirmada')
+        fila=C.fila_respostas_carregar();nova=[i for i in fila if not(i.get('numero')==numero and i.get('marca')==marca)]
+        if len(nova)!=len(fila) and not C.fila_respostas_salvar(nova):raise RuntimeError('fila não confirmada')
+        return 0
+    except A.Aguardar as e:
+        garantir_pendencia(numero,texto,marca)
+        responder(numero,str(e).replace('<!--','&lt;!--'),marca,pendente=True)
+        return 0
+    except A.Revisao as e:
+        # Bloqueio é explícito, não é recibo de sucesso. Não repetir efeitos incertos.
+        responder(numero,"**Não executei integralmente este objetivo. Revisão necessária:** "+str(e).replace('<!--','&lt;!--'),marca)
+        fila=C.fila_respostas_carregar();nova=[i for i in fila if not(i.get('numero')==numero and i.get('marca')==marca)]
+        if len(nova)!=len(fila):C.fila_respostas_salvar(nova)
+        return 0
+
 def principal():
     import trabalhos
     dados = do_evento()
@@ -821,7 +846,7 @@ def _principal_com_origem(dados):
             C.log(f"tempo: não consegui registrar ({e})")
 
     numero, texto, marca, origem = dados["numero"], dados["texto"], dados["marca"], dados.get("origem", "?")
-    C.log(f"origem: {origem} | conversa #{numero} | marca: {marca} | texto: {texto[:80]!r}")
+    C.log(f"origem: {origem} | conversa #{numero} | marca: {marca} | caracteres: {len(texto)}")
     if not numero:
         return 0
 
@@ -832,12 +857,16 @@ def _principal_com_origem(dados):
             C.log(f"já respondida (marca {marca}) — ignorando para não duplicar")
             return 0
 
-        import casa
+        import casa,autonomia_reversivel as A
+        if A.comando_controle(texto) is not None:
+            return responder_autonomia(numero,texto,marca)
         if casa.escopo_leitura_operacional():
             return responder_operacao_leitura(numero,texto,marca)
 
         import trabalhos
         trabalho_anterior = trabalhos.recuperar_da_origem()
+        if A.eh_objetivo(texto) and (trabalho_anterior is None or A.tem_estado_da_origem()):
+            return responder_autonomia(numero,texto,marca)
         if trabalho_anterior is not None:
             return retomar_trabalho_da_mensagem(numero, texto, marca, trabalho_anterior)
 
