@@ -64,13 +64,14 @@ def salvar(s):
  s.pop('_ultima_resposta',None)
  old=s.pop('_sha',None);s['_sha']=gravar(C.REPO,estado_path(s['id']),s,old);return s
 
-def decodificar_resposta(texto):
+def decodificar_resposta(texto,parcial=False):
  """Normaliza apresentação, não permissões. Resposta bruta fica no privado."""
  notas=[];texto=texto.strip();m=re.search(r'```(?:json)?\s*(\{.*?\})\s*```',texto,re.S|re.I)
  if m:texto=m.group(1);notas.append('envelope_markdown_removido')
  v,fim=json.JSONDecoder().raw_decode(texto)
  if texto[fim:].strip():notas.append('pos_texto_ignorado_sem_autoridade')
  if not isinstance(v,dict):raise ValueError('proposta precisa ser objeto')
+ if parcial and v and all(isinstance(n,str) and re.fullmatch(r'[A-Za-z][A-Za-z0-9_-]{0,60}\.(py|md|json|txt)',n) and isinstance(t,str) for n,t in v.items()):v={'arquivos':v};notas.append('mapa_reparo_sem_envelope')
  tipo=v.get('tipo')
  for campo in ('pesquisa','documento'):
   if campo in v and isinstance(v[campo],str) and len(v[campo])<=4000:
@@ -78,7 +79,7 @@ def decodificar_resposta(texto):
    elif tipo=='documento' and campo=='documento' and 'texto' not in v:v['texto']=v[campo]
    v.pop(campo);notas.append('ramo_textual_normalizado:'+campo)
  if isinstance(v.get('arquivos'),dict):
-  validar_arquivos(v['arquivos'])
+  validar_arquivos(v['arquivos'],parcial=parcial)
   for n,t in v['arquivos'].items():
    if not n.endswith('.py'):continue
    try:ast.parse(t,filename=n)
@@ -88,7 +89,7 @@ def decodificar_resposta(texto):
     else:raise
  return v,notas
 
-def modelo_json(s,prompt):
+def modelo_json(s,prompt,parcial=False):
  politica()  # Revogação/pausa é reavaliada antes de cada chamada.
  if time.time()<s.get('proxima_tentativa_modelo',0):raise Aguardar('Modelos indisponíveis temporariamente; aguardo10min antes de retentar, sem novo pedido ou chamada prematura.')
  if s['chamadas_modelo']>=3:raise Revisao('Limite de 3 chamadas à cadeia por objetivo atingido; plano/checkpoints preservados.')
@@ -102,7 +103,7 @@ def modelo_json(s,prompt):
  s['ultima_proposta']=RAIZ+'/'+s['id']+'/propostas/'+str(s['chamadas_modelo'])+'.json'
  gravar(C.REPO,s['ultima_proposta'],{'texto':texto,'motor':motor})
  s['_ultima_resposta']=texto
- v,notas=decodificar_resposta(texto)
+ v,notas=decodificar_resposta(texto,parcial=parcial)
  if notas:s.setdefault('normalizacoes_proposta',[]).append({'tentativa':s['chamadas_modelo'],'itens':notas})
  s['motor']=motor;return v
 
@@ -206,17 +207,22 @@ def recuperar_pr(s):
 def reparar(s,ci):
  if s.get('reparos',0)>=2:raise Revisao('Dois reparos automáticos sem CI aprovada; nenhuma integração foi feita.')
  anterior=s['plano']['arquivos']
- v=modelo_json(s,'Corrija SOMENTE implementação do projeto abaixo para passar nos testes existentes. Retorne JSON com arquivos, mantendo todos os test_*.py exatamente iguais. Não reduza testes, não crie efeitos externos. Arquivos: '+json.dumps(anterior,ensure_ascii=False)+'\nContrato de aceite congelado (não pode alterar): '+json.dumps(s.get('aceite'),ensure_ascii=False)+'\nFalha real da CI: '+str(ci.get('detalhes',''))[-6000:])
- fs=validar_arquivos(v.get('arquivos'))
- for n,txt in anterior.items():
-  if n.startswith('test_') and fs.get(n)!=txt:raise Revisao('Reparo tentou trocar/remover testes anteriores; não executar.')
+ if s.get('reparo_proposta') is not None:
+  v=s['reparo_proposta']
+  if s.get('reparo_proposta_sha256')!=S.digest(v) or s.get('reparo_base_head')!=s['head']:raise Revisao('Proposta de reparo em cache diverge da base/recibo; não reaproveitar.')
+ else:
+  v=modelo_json(s,'Corrija SOMENTE implementação do projeto abaixo para passar nos testes existentes. Retorne JSON com arquivos, mantendo todos os test_*.py exatamente iguais. Não reduza testes, não crie efeitos externos. Arquivos: '+json.dumps(anterior,ensure_ascii=False)+'\nContrato de aceite congelado (não pode alterar): '+json.dumps(s.get('aceite'),ensure_ascii=False)+'\nFalha real da CI: '+str(ci.get('detalhes',''))[-6000:],parcial=True)
+ fs=normalizar_reparo(v,anterior)
+ s.update(reparo_proposta=v,reparo_proposta_sha256=S.digest(v),reparo_base_head=s['head']);salvar(s)
  conferir_pr(s);entries=[]
  for n,txt in fs.items():
   b=txt.encode();blob=C.gh('POST',f'/repos/{C.REPO}/git/blobs',{'content':base64.b64encode(b).decode(),'encoding':'base64'});assert blob['sha']==sha(b);entries.append({'path':s['prefixo_projeto']+n,'mode':'100644','type':'blob','sha':blob['sha']})
  t=C.gh('POST',f'/repos/{C.REPO}/git/trees',{'base_tree':C.gh('GET',f'/repos/{C.REPO}/git/commits/'+s['head'])['tree']['sha'],'tree':entries})
  co=C.gh('POST',f'/repos/{C.REPO}/git/commits',{'tree':t['sha'],'parents':[s['head']],'message':'autonomia: reparo limitado por CI, testes preservados'})
  C.gh('PATCH',f'/repos/{C.REPO}/git/refs/heads/'+s['branch'],{'sha':co['sha'],'force':False})
- s['head']=co['sha'];s['arquivos_sha'].update({e['path']:e['sha'] for e in entries});s['plano']['arquivos']=fs;s['reparos']=s.get('reparos',0)+1;s['fase']='pr_criada';salvar(s)
+ s['head']=co['sha'];s['arquivos_sha'].update({e['path']:e['sha'] for e in entries});s['plano']['arquivos']=fs
+ for campo in ('reparo_proposta','reparo_proposta_sha256','reparo_base_head'):s.pop(campo,None)
+ s['reparos']=s.get('reparos',0)+1;s['fase']='pr_criada';salvar(s)
 
 def conferir_pr(s):
  pr=C.gh('GET',f'/repos/{C.REPO}/pulls/'+str(s['pr']))
@@ -365,3 +371,11 @@ def preparar_aceite(s,pedido):
   except (ValueError,TypeError,KeyError) as e:
    s.setdefault('erros_aceite',[]).append(str(e)[:400]);salvar(s);prompt+='\nContrato inválido: '+str(e)[:400]+'. Corrija o esquema sem mudar o objetivo.'
  raise Revisao('Não foi possível estabelecer aceite observável dentro do orçamento; não integrar código sem verificação.')
+
+
+def normalizar_reparo(v,anterior):
+ if not isinstance(v,dict) or set(v)!={'arquivos'}:raise Revisao('Reparo exige apenas arquivos; nenhum campo de autoridade é aceito.')
+ delta=validar_arquivos(v['arquivos'],parcial=True)
+ for n,txt in anterior.items():
+  if n.startswith('test_') and n in delta and delta[n]!=txt:raise Revisao('Reparo tentou trocar testes anteriores; não executar.')
+ fs=dict(anterior);fs.update(delta);return validar_arquivos(fs)

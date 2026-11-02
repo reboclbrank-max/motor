@@ -10,14 +10,14 @@ b=io.StringIO();r=unittest.TextTestRunner(stream=b,verbosity=1).run(s)
 print('RESULTADO_CI:'+json.dumps({'testes':n,'sucesso':r.wasSuccessful(),'detalhes':b.getvalue()[-6000:]}))
 sys.exit(0 if r.wasSuccessful() else 1)
 '''
-def validar_arquivos(fs):
- if not isinstance(fs,dict) or not 2<=len(fs)<=12:raise ValueError('projeto exige 2 a 12 arquivos')
+def validar_arquivos(fs,parcial=False):
+ if not isinstance(fs,dict) or not (1 if parcial else 2)<=len(fs)<=12:raise ValueError('projeto exige 2 a 12 arquivos')
  if sum(len(str(v).encode()) for v in fs.values())>100000:raise ValueError('projeto grande demais')
  for n,v in fs.items():
   if not isinstance(n,str) or not re.fullmatch(r'[A-Za-z][A-Za-z0-9_-]{0,60}\.(py|md|json|txt)',n) or n in ('sitecustomize.py','usercustomize.py'):raise ValueError('caminho não permitido')
   if not isinstance(v,str) or not v.strip() or len(v)>40000:raise ValueError('conteúdo inválido')
- if not any(n.startswith('test_') and n.endswith('.py') for n in fs):raise ValueError('exige unittest test_*.py')
- if not any(n.endswith('.py') and not n.startswith('test_') for n in fs):raise ValueError('falta implementação')
+ if not parcial and not any(n.startswith('test_') and n.endswith('.py') for n in fs):raise ValueError('exige unittest test_*.py')
+ if not parcial and not any(n.endswith('.py') and not n.startswith('test_') for n in fs):raise ValueError('falta implementação')
  return fs
 
 def _container(fs,harness=HARNESS):
