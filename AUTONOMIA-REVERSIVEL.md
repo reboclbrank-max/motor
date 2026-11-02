@@ -91,3 +91,14 @@ A proposta de reparo é salva com SHA256/base antes das escritas Git. Reaproveit
 valida esse par e os testes, sem nova chamada de modelo; falhas/efeitos incertos
 continuam pedindo revisão em vez de forçar refs. A migração de109 é manutenção
 registrada, não alegação de fluxo ininterrupto sem intervenção.
+
+### Transporte e metadados de CI
+Até3tentativas no MESMO job paraHTTP403/404/409/429/5xx ou as duas leituras de
+SHA/diff eventualmente inconsistentes do PR;15s/30sde backoff, reconferindo política,
+workflow e PR. Falha de teste, pausa, contrato divergente e mudança de workflows
+não são retentadas como transporte. Se o resultado já foi salvo para o MESMO
+run/head/contrato, reemitir status/callback não reexecuta o container. Outro run
+não reaproveita esse recibo. Sem novo dispatch de CI ou inferência nessa repetição.
+Esgotamento ou efeitos incertos continuam explícitos: não se força aprovação.
+A reexecução manual do CI109 após falha inicial de pré-checagem é registrada como
+manutenção, não como prova de que esta melhoria já rodava no código anterior.

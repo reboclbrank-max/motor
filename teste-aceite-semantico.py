@@ -1,6 +1,6 @@
 import unittest,json,copy,base64,pathlib,tempfile,subprocess,sys,os,importlib.util
 from unittest.mock import patch
-import aceite_semantico as S,execucao_isolada as E,autonomia_reversivel as A,comum as C,trabalhos as T
+import aceite_semantico as S,execucao_isolada as E,autonomia_reversivel as A,comum as C,trabalhos as T,ci_projeto_autonomo as CI
 FS={'main.py':'def contar(xs):return {"total":len(xs)}\n','test_main.py':'import unittest\nclass Test(unittest.TestCase):\n def test_ok(self):self.assertTrue(True)\n'}
 CON={'etapas':['Contar itens e preservar entrada'],'casos':[{'etapa':1,'modulo':'main','funcao':'contar','args':[[]],'esperado':{'total':0},'nao_muta':True}]}
 class Aceite(unittest.TestCase):
@@ -80,6 +80,24 @@ class Aceite(unittest.TestCase):
  def test_reparo_flat_com_campo_autoridade_nao_e_normalizado(self):
   v,_=A.decodificar_resposta(json.dumps({'main.py':FS['main.py'],'repo':'outro'}),parcial=True)
   with self.assertRaises(A.Revisao):A.normalizar_reparo(v,FS)
+ def test_ci_transporte_temporario_retenta_sem_novo_job_ou_modelo(self):
+  with patch.object(CI,'avaliar',side_effect=[RuntimeError('HTTP 404'),0]) as run,patch.object(CI.time,'sleep') as sleep:
+   self.assertEqual(CI.principal('a'*32),0);self.assertEqual(run.call_count,2);sleep.assert_called_once_with(15)
+ def test_ci_pausa_e_falha_de_teste_nao_sao_relaxadas(self):
+  for erro in [A.Aguardar('pausado'),A.Revisao('workflows mudaram'),ValueError('contrato divergente')]:
+   with patch.object(CI,'avaliar',side_effect=erro) as run,patch.object(CI.time,'sleep') as sleep:self.assertEqual(CI.principal('a'*32),1);self.assertEqual(run.call_count,1);sleep.assert_not_called()
+  with patch.object(CI,'avaliar',return_value=1) as run,patch.object(CI.time,'sleep') as sleep:self.assertEqual(CI.principal('a'*32),1);self.assertEqual(run.call_count,1);sleep.assert_not_called()
+ def test_ci_tres_falhas_de_transporte_param_sem_loop(self):
+  with patch.object(CI,'avaliar',side_effect=RuntimeError('HTTP 503')) as run,patch.object(CI.time,'sleep') as sleep:self.assertEqual(CI.principal('a'*32),1);self.assertEqual(run.call_count,3);self.assertEqual([c.args[0] for c in sleep.call_args_list],[15,30])
+ def test_ci_recibo_existente_reenvia_callback_sem_executar_codigo(self):
+  ident='a'*32;head='b'*40;state={'fase':'ci_aguardando','head':head,'aceite':CON};result={'sucesso':True,'head':head,'run_id':123,'aceite_sha256':S.digest(CON),'testes':1,'aceite':{'sucesso':True,'casos':1}};b=json.dumps(result).encode();prior={'sha':A.sha(b),'content':base64.b64encode(b).decode()};posts=[]
+  with patch.dict(os.environ,{'GITHUB_RUN_ID':'123'}),patch.object(A,'politica',return_value={}),patch.object(A,'ler',return_value=(state,'x')),patch.object(A,'opt',return_value=prior),patch.object(A,'garantir_workflows'),patch.object(A,'conferir_pr'),patch.object(CI,'executar',side_effect=AssertionError('não reexecutar container')),patch.object(C,'gh',side_effect=lambda m,p,d:posts.append((m,p,d))):
+   self.assertEqual(CI.avaliar(ident),0);self.assertEqual(len(posts),2);self.assertTrue(posts[-1][1].endswith('/dispatches'))
+ def test_ci_nao_reusa_recibo_de_outro_run(self):
+  ident='a'*32;state={'fase':'ci_aguardando','head':'b'*40};r={'sucesso':True,'head':'b'*40,'run_id':999};b=json.dumps(r).encode();prior={'sha':A.sha(b),'content':base64.b64encode(b).decode()}
+  with patch.dict(os.environ,{'GITHUB_RUN_ID':'123'}),patch.object(A,'politica',return_value={}),patch.object(A,'ler',return_value=(state,'x')),patch.object(A,'opt',return_value=prior),patch.object(A,'garantir_workflows'),patch.object(A,'conferir_pr'),patch.object(C,'gh') as gh:
+   with self.assertRaises(ValueError):CI.avaliar(ident)
+   gh.assert_not_called()
  def test_atualizar_reconhecido(self):
   self.assertTrue(A.eh_objetivo('Atualize projeto '+'a'*32));self.assertTrue(A.eh_objetivo('Atualizar projeto '+'a'*32))
  def test_teto_de_chamadas_preservado(self):
