@@ -19,10 +19,12 @@ def avaliar(ident):
    if e['mode']!='100644':raise ValueError('modo não permitido')
    nome=e['path'][len(s['prefixo_projeto']):];d=C.gh('GET',f'/repos/{C.REPO}/git/blobs/'+e['sha']);b=base64.b64decode(d['content']);assert A.sha(b)==e['sha'];fs[nome]=b.decode()
  validar_arquivos(fs)
+ if s.get('aceite') and s.get('aceite_sha256')!=A.S.digest(s['aceite']):raise ValueError('contrato mudou depois do congelamento')
  run_id=int(os.environ['GITHUB_RUN_ID']);url=f'https://github.com/{C.REPO_ROBO}/actions/runs/{run_id}'
  C.gh('POST',f'/repos/{C.REPO}/statuses/'+s['head'],{'state':'pending','context':A.CONTEXTO_CI,'description':'Testando projeto em container sem rede/segredos','target_url':url})
- try:result=executar(fs)
+ try:result=executar(fs,s.get('aceite'))
  except Exception as e:result={'sucesso':False,'testes':0,'detalhes':'Falha de isolamento/execução: '+type(e).__name__}
+ if s.get('aceite'):result['aceite_sha256']=A.S.digest(s['aceite'])
  result.update(head=s['head'],run_id=run_id,workflow=A.WORKFLOW)
  A.gravar(C.REPO,A.RAIZ+'/'+ident+'/ci/'+s['head']+'.json',result)
  C.gh('POST',f'/repos/{C.REPO}/statuses/'+s['head'],{'state':'success' if result['sucesso'] else 'failure','context':A.CONTEXTO_CI,'description':'CI isolada passou' if result['sucesso'] else 'CI isolada falhou; não integrar','target_url':url})

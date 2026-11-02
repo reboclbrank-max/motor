@@ -35,3 +35,39 @@ Não é autonomia ilimitada ou garantia semântica universal. CI e testes podem 
 Propostas brutas e erros ficam privados. A normalização aceita envelope JSON em Markdown e pós-texto sem autoridade, descarta somente ramos textuais conhecidos inativos e desfaz uma camada de escapes de arquivo inteiro somente se o original falhar no parser e o candidato passar. Não muda caminhos, comandos, política ou testes. Campos de efeito desconhecidos continuam rejeitados; AST não executa o código nem substitui CI.
 
 Ao atualizar projeto explicitamente identificado, o controlador lê somente esse diretório privado, confere blobs/commit, limita o contexto e barra padrões conhecidos de credenciais antes de enviar ao modelo. Projeto inexistente não vira outro projeto silenciosamente. O snapshot de leitura é a base da alteração; mudança concorrente no projeto impede integração sem nova conferência.
+
+## Evolução técnica de 2026-11-02 — missões e aceite observado (estado v2)
+
+Novos projetos são decompostos em até5subtarefas verificáveis. Uma segunda
+passagem de modelo recebe o objetivo ORIGINAL e a proposta como dados (sem histórico),
+deriva casos de entrada/saída/exceção e vincula cada subtarefa a pelo menos um caso.
+Esse contrato declarativo é validado e congelado por SHA256 ANTES do PR/CI.
+Não contém código de teste executável, shell, repo, workflow ou autoridade.
+
+Além dos unittests do projeto, um segundo container executa chamadas públicas JSON
+ou CLI Python com stdin/argv e observa resultado/erro/argumentos após chamada,
+ou stdout/exit code. O supervisor no container não importa o projeto: cada caso
+roda em subprocesso. Expectativas ficam no controlador, fora do container, que
+compara valores/tipos JSON, exceções, não-mutação solicitada ou stdout/exit code.
+Um `unittest` verde ou um booleano `sucesso` do programa não substitui essas
+observações. É obrigatório resultado CI do mesmo SHA de código E contrato.
+
+Falha nos casos alimenta o reparo automático com observado versus esperado.
+Implementação pode mudar; contrato e testes anteriores não. Nova CI antes de merge.
+Subtarefas só recebem `aceite_observado` com os números dos casos, SHA e URL da CI.
+Recibo contém roteiro/evidência; reentrada não regenera contrato nem executa novamente.
+Estados antigos permanecem compatíveis e entregas históricas não são reabertas.
+“Atualize/Atualizar projeto <id>” também passa a ser reconhecido.
+
+Nenhuma ampliação de poderes/gastos/contas/credenciais/exclusões/envios externos.
+Mesma política e teto de3chamadas à cadeia: geração+revisor normalmente usam2;
+sobra1para reparar. Máximo2reparos continua subordinado a esse teto.
+Contrato:1a12casos/20KB,1a5subtarefas; cada container mantém45s/256MB/sem rede,
+não-root/read-only/sem segredos. Não existe fallback de código gerado no host.
+Projetos não representáveis por esses executores/casos não ganham aprovação falsa.
+
+Segunda passagem pode usar o MESMO provedor/modelo: não é juiz independente
+infalível. Casos derivados por LLM podem omitir/reinterpretar requisitos; comparação
+é independente do veredito do código, não prova universal da intenção do usuário.
+Autonomia técnica ampliada não é agenda empresarial autoinventada, qualquer linguagem
+ou autonomia irrestrita. Continua dependendo de Actions, modelos e quotas existentes.

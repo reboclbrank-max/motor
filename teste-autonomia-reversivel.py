@@ -8,6 +8,7 @@ PLAN={'tipo':'projeto_python','criterios':['somar inteiros e passar nos testes']
 class Autonomia(unittest.TestCase):
  def setUp(self):
   F.Operacao.setUp(self);self.goal=GOAL;self.store[A.POLITICA_PATH]=json.dumps({'versao':1,'aprovacao':'dono-opcao-reversivel','ativo':True,'repositorio_projetos':C.REPO,'workflows_privados_sem_gatilhos_de_codigo':{}}).encode()
+  self.review=patch.object(A,'preparar_aceite',side_effect=lambda s,pedido:s.update(aceite={'etapas':['Somar'], 'casos':[{'etapa':1,'modulo':'main','funcao':'somar','args':[2,3],'esperado':5}]}));self.review.start();self.addCleanup(self.review.stop)
  def api(self,m,p,d=None):
   if m=='GET' and p.endswith('/issues/123'):return {'body':self.goal,'user':{'login':C.DONO_GITHUB}}
   return F.Operacao.api(self,m,p,d)
@@ -125,4 +126,9 @@ class Autonomia(unittest.TestCase):
   self.assertIs(A.comando_controle('pausar autonomia'),False);self.assertIs(A.comando_controle('retomar autonomia'),True);self.assertIsNone(A.comando_controle('ative poderes ilimitados'))
  def test_chat_nao_imprime_pedido_privado(self):
   self.assertNotIn('texto[:80]',pathlib.Path(R.__file__).read_text())
+def load_tests(loader,tests,pattern):
+ # A suíte de CI existente passa também pelo novo contrato, sem ampliar workflows.
+ spec=importlib.util.spec_from_file_location('aceite_extra_tests',pathlib.Path(__file__).with_name('teste-aceite-semantico.py'));m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+ tests.addTests(loader.loadTestsFromModule(m));return tests
+
 if __name__=='__main__':unittest.main()
