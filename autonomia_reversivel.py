@@ -83,10 +83,18 @@ def validar_plano(v):
  if v['tipo']=='documento' and (not isinstance(v.get('texto'),str) or not 40<=len(v['texto'])<=30000):raise ValueError('documento inválido')
  return v
 
+def vincular_executor(v,pedido):
+ s=normalizar(pedido.strip())
+ codigo=bool(re.match(r'^(crie|criar|desenvolva|implemente)\b',s) and re.search(r'\bpython\b',s) and re.search(r'\b(projeto|funcao|programa|script|codigo)\b',s)) or bool(re.search(r'\bprojeto\s+[0-9a-f]{32}\b',s))
+ pesquisa=bool(re.match(r'^(pesquise|investigue)\b',s))
+ if codigo and v['tipo'] not in ('projeto_python','requer_aprovacao'):raise ValueError('objetivo de código exige executor de projeto, não documento substituto')
+ if pesquisa and v['tipo'] not in ('pesquisa','requer_aprovacao'):raise ValueError('objetivo de pesquisa exige fontes coletadas')
+ return v
+
 def planejar(s,pedido):
  prompt='OBJETIVO ATUAL:\n'+pedido+'\nProponha JSON com tipo, criterios (1 a 5 critérios verificáveis) e campos do tipo: projeto_python: arquivos (mapa de nomes simples para texto, inclua implementação Python e unittest test_*.py, só biblioteca padrão, máximo12arquivos/100KB); pesquisa: consulta pública de busca; documento: texto completo. Para projeto existente, só altere projeto isolado explicitamente identificado por 32hex; nunca alegue mudar produção. Para objetivo ambíguo, fora desses executores, alteração da própria plataforma, conta, gasto, exclusão ou comunicação externa use tipo requer_aprovacao e motivo. Nunca escolher um projeto novo para fingir correção do Chat de produção.'
  for _ in range(2):
-  try:return validar_plano(modelo_json(s,prompt))
+  try:return vincular_executor(validar_plano(modelo_json(s,prompt)),pedido)
   except (ValueError,TypeError,KeyError):prompt+='\nProposta anterior inválida. Refaça somente o esquema permitido.'
  raise Revisao('Modelo não produziu plano válido; nenhuma ação de projeto executada.')
 
