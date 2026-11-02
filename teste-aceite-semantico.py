@@ -68,6 +68,18 @@ class Aceite(unittest.TestCase):
     pathlib.Path(td,'main.py').write_text(src);r=subprocess.run([sys.executable,'-c',S.harness(v).replace('/projeto',td)],capture_output=True,text=True,timeout=5);raw=json.loads(r.stdout.split('RESULTADO_CI:')[1]);self.assertEqual(S.comparar(v,raw['observacoes'])['sucesso'],'raise ValueError("entrada")' in src)
  def test_interface_para_revisor_nao_inclui_corpos_docstrings_ou_testes(self):
   fs={'main.py':'def contar(xs):\n "segredo_de_corpo"\n return {"total":999}\n','test_main.py':FS['test_main.py']};data=json.dumps(S.interfaces(fs));self.assertIn('contar',data);self.assertNotIn('999',data);self.assertNotIn('segredo_de_corpo',data);self.assertNotIn('test_main',data);self.assertIn('xs',data)
+ def test_reparo_mapa_flat_e_delta_sem_relaxar_plano_inicial(self):
+  delta={'main.py':'def contar(xs):return {"total":len(xs)}\n'}
+  for raw in [delta,{'arquivos':delta}]:
+   v,notas=A.decodificar_resposta(json.dumps(raw),parcial=True);full=A.normalizar_reparo(v,FS);self.assertEqual(full['test_main.py'],FS['test_main.py']);self.assertEqual(full['main.py'],delta['main.py'])
+  with self.assertRaises(ValueError):A.decodificar_resposta(json.dumps({'arquivos':delta}))
+ def test_reparo_delta_nao_esconde_tampering_de_teste_ou_path(self):
+  with self.assertRaises(A.Revisao):A.normalizar_reparo({'arquivos':{'test_main.py':'# fraude'}},FS)
+  with self.assertRaises(ValueError):A.normalizar_reparo({'arquivos':{'../comum.py':'x'}},FS)
+  with self.assertRaises(A.Revisao):A.normalizar_reparo({'arquivos':{'main.py':FS['main.py']},'shell':'x'},FS)
+ def test_reparo_flat_com_campo_autoridade_nao_e_normalizado(self):
+  v,_=A.decodificar_resposta(json.dumps({'main.py':FS['main.py'],'repo':'outro'}),parcial=True)
+  with self.assertRaises(A.Revisao):A.normalizar_reparo(v,FS)
  def test_atualizar_reconhecido(self):
   self.assertTrue(A.eh_objetivo('Atualize projeto '+'a'*32));self.assertTrue(A.eh_objetivo('Atualizar projeto '+'a'*32))
  def test_teto_de_chamadas_preservado(self):
@@ -123,4 +135,15 @@ class Fluxo(unittest.TestCase):
   with T.contexto_mensagem(123,'a123',self.goal),patch.object(C,'gh',side_effect=api),patch.object(C,'chamar_llm',return_value=(json.dumps({'arquivos':F.FILES}),'reparo-fixture',None)) as llm,patch.object(A,'conferir_pr',return_value={}):
    state=self.state();state.update(chamadas_modelo=2,head='a'*40,branch='autonomia/'+state['id'],prefixo_projeto='PROJETOS/'+state['id']+'/',arquivos_sha={},aceite=copy.deepcopy(CON_SOMA),aceite_sha256=S.digest(CON_SOMA));A.reparar(state,{'detalhes':'caso1: esperado5 observado0'})
    self.assertEqual(state['chamadas_modelo'],3);self.assertEqual(state['reparos'],1);self.assertEqual(state['aceite'],CON_SOMA);self.assertEqual(state['plano']['arquivos']['test_main.py'],F.FILES['test_main.py']);self.assertIn('caso1',llm.call_args.args[0][0]['content']);self.assertIn('Contrato de aceite congelado',llm.call_args.args[0][0]['content'])
+ def test_reparo_em_cache_nao_gasta_quarta_chamada(self):
+  old_api=C.gh
+  def api(m,path,d=None):
+   if m=='POST' and path.endswith('/git/blobs'):return {'sha':A.sha(base64.b64decode(d['content']))}
+   if m=='GET' and '/git/commits/' in path:return {'tree':{'sha':'treeold'}}
+   if m=='POST' and path.endswith('/git/trees'):return {'sha':'treenew'}
+   if m=='POST' and path.endswith('/git/commits'):return {'sha':'b'*40}
+   if m=='PATCH' and '/git/refs/' in path:self.assertFalse(d['force']);return {}
+   return old_api(m,path,d)
+  with T.contexto_mensagem(123,'a123',self.goal),patch.object(C,'gh',side_effect=api),patch.object(C,'chamar_llm',side_effect=AssertionError('quarta inferencia proibida')),patch.object(A,'conferir_pr',return_value={}):
+   state=self.state();v={'arquivos':{'main.py':F.FILES['main.py']}};state.update(chamadas_modelo=3,head='a'*40,branch='autonomia/'+state['id'],prefixo_projeto='PROJETOS/'+state['id']+'/',arquivos_sha={},aceite=copy.deepcopy(CON_SOMA),aceite_sha256=S.digest(CON_SOMA),reparo_proposta=v,reparo_proposta_sha256=S.digest(v),reparo_base_head='a'*40);A.reparar(state,{'detalhes':'falha observada'});self.assertEqual(state['chamadas_modelo'],3);self.assertEqual(state['reparos'],1);self.assertEqual(state['plano']['arquivos']['test_main.py'],F.FILES['test_main.py']);self.assertNotIn('reparo_proposta',state)
 if __name__=='__main__':unittest.main()

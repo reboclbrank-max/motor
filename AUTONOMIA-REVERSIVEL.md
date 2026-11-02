@@ -78,3 +78,16 @@ checkpoint com backoff10min e retomada pela varredura já existente. Não chama 
 antes do prazo, não cria loop de auto-dispatch nem cron novo. Continua contando no
 mesmo orçamento de3chamadas e só bloqueia ao esgotá-lo. Essa recuperação tem testes
 de contrato com relógio/API simulados; não se provoca indisponibilidade de provedor real.
+
+### Reparo: protocolo observado e retomada sem nova inferência
+Na prova109 o modelo devolveu um mapa de nomes→conteúdo sem o envelope `arquivos`;
+os dois arquivos estavam presentes e o teste era idêntico ao anterior. O protocolo
+antigo rejeitou a estrutura, não a correção. A normalização agora aceita esse mapa
+SOMENTE no reparo, com todos os nomes/conteúdos validados; campos de autoridade
+não são convertidos. Também aceita delta de arquivos: omissão preserva o anterior,
+nunca exclui. Teste explicitamente modificado continua vetado. O plano inicial
+continua exigindo projeto completo com unittest e implementação.
+A proposta de reparo é salva com SHA256/base antes das escritas Git. Reaproveitamento
+valida esse par e os testes, sem nova chamada de modelo; falhas/efeitos incertos
+continuam pedindo revisão em vez de forçar refs. A migração de109 é manutenção
+registrada, não alegação de fluxo ininterrupto sem intervenção.
