@@ -5,6 +5,7 @@ Nunca modifica executores, secrets, workflows, memória histórica ou permissõe
 import ast,base64,hashlib,json,os,re,time
 from contextvars import ContextVar
 _LIMITE_MODELO=ContextVar("limite_modelo_controlador",default=3)
+_LIMITE_REPAROS=ContextVar("limite_reparos_controlador",default=2)
 import comum as C,trabalhos as T
 import aceite_semantico as S
 from intencao_operacional import normalizar
@@ -209,7 +210,9 @@ def recuperar_pr(s):
  s['pr']=pr['number'];s['pr_url']=pr['html_url'];salvar(s)
 
 def reparar(s,ci):
- if s.get('reparos',0)>=2:raise Revisao('Dois reparos automáticos sem CI aprovada; nenhuma integração foi feita.')
+ limite_reparos=_LIMITE_REPAROS.get()
+ if limite_reparos not in (2,7):raise Revisao('Limite de reparos não autorizado.')
+ if s.get('reparos',0)>=limite_reparos:raise Revisao('Limite de reparos automáticos sem CI aprovada; nenhuma integração foi feita.')
  anterior=s['plano']['arquivos']
  if s.get('reparo_proposta') is not None:
   v=s['reparo_proposta']

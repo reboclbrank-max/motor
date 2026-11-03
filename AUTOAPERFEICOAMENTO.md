@@ -50,3 +50,11 @@ restaurada depois. Modelo local7B, mesma família/runner, sem prompt remoto ou n
 credencial. Código inválido é journalado antes de AST; isso corrige a perda de
 diagnóstico da3ªtentativa, não a recria nem finge que foi preservada.2reparos de
 código válidos continuam o teto anterior, além da limitação total de chamadas.
+
+## Recuperação coerente com as8tentativas autorizadas
+O teto total8 inclui propostas testadas, não só rascunhos. Dentro desse contexto
+aprovado: no máximo7reparos, sempre sujeitos às8chamadas totais e sem zerar nenhum
+contador anterior; projetos comuns permanecem3chamadas/2reparos. ContextVars restauradas.
+Falha REAL daCI é encaminhada ao modelo local, com contexto4096 para fonte+diagnóstico;
+comportamento normal do motor local permanece2048. Não fornece algoritmo corretivo,
+não altera testes/expectativas para fazer passar. Mantém todas as negativas.
