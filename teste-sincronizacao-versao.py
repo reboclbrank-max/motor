@@ -1,5 +1,6 @@
 """Contratos da sincronização com API em memória; sem rede, segredo ou dado real."""
 import base64
+import fcntl
 import json
 import os
 import tempfile
@@ -245,6 +246,57 @@ class Sincronizacao(unittest.TestCase):
         with patch.object(S,'_atomico',side_effect=OSError('disco')):self.assertEqual(S.baixar(),1)
     def test_manifesto_corrompido_nao_envia(self):
         self.baixar();Path(S.MANIFESTO).write_text('{');self.assertEqual(S.subir(),1);self.assertFalse(self.puts)
+
+    def test_trava_local_bloqueia_download_concorrente_sem_rede(self):
+        fd = os.open(S.TRAVA_LOCAL, os.O_RDWR | os.O_CREAT, 0o600)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            saida = io.StringIO()
+            with patch.object(S, 'listar_remoto') as listar, contextlib.redirect_stdout(saida):
+                self.assertEqual(S.baixar(), 1)
+                listar.assert_not_called()
+            self.assertIn('trava_local_em_uso', saida.getvalue())
+            self.assertFalse(Path(self.arq).exists())
+            self.assertFalse(Path(S.MANIFESTO).exists())
+            self.assertFalse(self.puts)
+        finally:
+            os.close(fd)
+        self.baixar()
+        self.assertEqual(Path(self.arq).read_bytes(), b'original')
+
+    def test_trava_local_bloqueia_envio_concorrente_e_pode_retentar(self):
+        self.baixar()
+        Path(self.arq).write_bytes(b'editado')
+        fd = os.open(S.TRAVA_LOCAL, os.O_RDWR)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            self.assertEqual(S.subir(), 1)
+            self.assertEqual(self.puts, [])
+            self.assertEqual(self.store[self.arq], b'original')
+        finally:
+            os.close(fd)
+        self.assertEqual(S.subir(), 0)
+        self.assertEqual(self.store[self.arq], b'editado')
+        self.assertEqual(len(self.puts), 1)
+
+    def test_trava_local_simbolica_nao_atinge_arquivo_externo(self):
+        Path('arquivo-externo').write_bytes(b'preservado')
+        Path(S.TRAVA_LOCAL).symlink_to('arquivo-externo')
+        with patch.object(S, 'listar_remoto') as listar:
+            self.assertEqual(S.baixar(), 1)
+            listar.assert_not_called()
+        self.assertEqual(Path('arquivo-externo').read_bytes(), b'preservado')
+        self.assertFalse(Path(self.arq).exists())
+        Path(S.TRAVA_LOCAL).unlink()
+        self.baixar()
+
+    def test_trava_local_permissiva_nao_e_aceita(self):
+        Path(S.TRAVA_LOCAL).write_text('')
+        Path(S.TRAVA_LOCAL).chmod(0o644)
+        with patch.object(S, 'listar_remoto') as listar:
+            self.assertEqual(S.baixar(), 1)
+            listar.assert_not_called()
+        self.assertFalse(Path(self.arq).exists())
 
 if __name__=='__main__':unittest.main()
 
