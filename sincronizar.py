@@ -199,8 +199,23 @@ def _baixar_sem_trava():
 
 
 def _ler_local(caminho):
-    with open(caminho, "rb") as f:
-        return f.read()
+    """Lê apenas arquivo regular próprio, sem atravessar link no último nome."""
+    # O_NONBLOCK evita espera infinita ao abrir FIFO antes da inspeção do tipo.
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+    with os.fdopen(os.open(caminho, flags), "rb") as f:
+        info = os.fstat(f.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise FalhaSync("arquivo_local_inseguro")
+        atual = os.lstat(caminho)
+        if (info.st_dev, info.st_ino) != (atual.st_dev, atual.st_ino):
+            raise FalhaSync("arquivo_local_substituido")
+        conteudo = f.read()
+        depois = os.fstat(f.fileno())
+        antes_versao = (info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+        depois_versao = (depois.st_size, depois.st_mtime_ns, depois.st_ctime_ns)
+        if antes_versao != depois_versao or len(conteudo) != info.st_size:
+            raise FalhaSync("arquivo_local_alterado_durante_leitura")
+        return conteudo
 
 
 class FalhaSync(ValueError):
@@ -237,9 +252,18 @@ def _relatar_falha(caminho,erro):
 
 
 def _subir_sem_trava():
-    if not os.path.isdir(PASTA):
+    if not os.path.lexists(PASTA):
         log("nada para subir")
         return 0
+    try:
+        # O caminho da pasta pode ter virado link após baixar. A validação por
+        # realpath de cada arquivo não protege a raiz quando ela própria é link.
+        if not stat.S_ISDIR(os.lstat(PASTA).st_mode):
+            raise FalhaSync("raiz_local_insegura")
+    except Exception as erro:
+        log("envio bloqueado antes de ler a memória:",
+            erro.codigo if isinstance(erro, FalhaSync) else _motivo_seguro(erro))
+        return 1
     try:
         base = _ler_base()
     except Exception as e:

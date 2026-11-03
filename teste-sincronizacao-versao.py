@@ -298,5 +298,52 @@ class Sincronizacao(unittest.TestCase):
             listar.assert_not_called()
         self.assertFalse(Path(self.arq).exists())
 
+    def test_envio_recusa_raiz_memoria_transformada_em_link(self):
+        self.baixar()
+        Path('externa').mkdir()
+        Path(self.arq).replace('externa/estado.json')
+        Path('MEMORIA').rmdir()
+        Path('externa/estado.json').write_bytes(b'conteudo externo, nunca enviar')
+        Path('MEMORIA').symlink_to('externa', target_is_directory=True)
+        out = io.StringIO()
+        with patch.object(S, 'listar_remoto') as listar, contextlib.redirect_stdout(out):
+            self.assertEqual(S.subir(), 1)
+            listar.assert_not_called()
+        self.assertEqual(Path('externa/estado.json').read_bytes(),
+                         b'conteudo externo, nunca enviar')
+        self.assertEqual(self.store[self.arq], b'original')
+        self.assertFalse(self.puts)
+        self.assertNotIn('conteudo externo', out.getvalue())
+
+    def test_envio_recusa_hardlink_de_arquivo_externo(self):
+        self.baixar()
+        Path('fora.txt').write_bytes(b'privado, nunca enviar')
+        os.link('fora.txt', 'MEMORIA/novo.txt')
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(S.subir(), 1)
+        self.assertFalse(self.puts)
+        self.assertEqual(self.store[self.arq], b'original')
+        self.assertNotIn('privado', out.getvalue())
+        self.assertEqual(Path('fora.txt').read_bytes(), b'privado, nunca enviar')
+
+    def test_envio_nao_trava_ao_encontrar_fifo(self):
+        self.baixar()
+        os.mkfifo('MEMORIA/00-fifo')
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(S.subir(), 1)
+        self.assertFalse(self.puts)
+        self.assertEqual(self.store[self.arq], b'original')
+        self.assertIn('arquivo_local_inseguro', out.getvalue())
+
+    def test_leitura_segura_recusa_link_mesmo_sem_preflight(self):
+        self.baixar()
+        Path('fora.txt').write_bytes(b'privado, nunca enviar')
+        Path('MEMORIA/novo.txt').symlink_to('../fora.txt')
+        with self.assertRaises(OSError):
+            S._ler_local('MEMORIA/novo.txt')
+        self.assertEqual(Path('fora.txt').read_bytes(), b'privado, nunca enviar')
+
 if __name__=='__main__':unittest.main()
 
