@@ -13,8 +13,8 @@
 ## Próximos gates
 
 1. Compatibilidade adicional e ensaio de retomada da fiação ainda desativada.
-1. Shadow operacional sem efeitos externos.
-2. Canário pequeno e reversível, somente depois de revisão.
+2. Shadow operacional sem efeitos externos.
+3. Canário pequeno e reversível, somente depois de revisão.
 
 Os quatro publicadores antigos permanecem desativados. Nenhuma mensagem histórica entra
 na migração ou nos testes. O progresso central entre repositórios também é registrado no
