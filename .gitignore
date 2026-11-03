@@ -8,3 +8,4 @@ __pycache__/
 # Versões-base do runner, nunca conteúdo público
 .memoria-sync.json
 .sync-*
+.memoria-sync.lock

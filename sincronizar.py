@@ -6,6 +6,8 @@ Não mescla versões divergentes, não apaga memória remota e não garante tran
 entre arquivos. Escritas feitas diretamente pela API continuam canônicas.
 """
 import base64
+import fcntl
+from contextlib import contextmanager
 import hashlib
 import json
 import os
@@ -22,6 +24,7 @@ TOKEN = os.environ.get("PAT_MEMORIA", "").strip()
 PASTA = os.environ.get("PASTA_MEMORIA", "MEMORIA").strip() or "MEMORIA"
 RAMO = os.environ.get("RAMO_MEMORIA", "main").strip() or "main"
 MANIFESTO = ".memoria-sync.json"
+TRAVA_LOCAL = ".memoria-sync.lock"
 # Cópias públicas distribuídas com o código, não memória produzida pelo runner.
 # A exceção exige nome E conteúdo exatos; nova versão requer revisão desta lista.
 SEMENTES_PUBLICAS = {
@@ -151,7 +154,7 @@ def _conferir_destino_download(remoto):
     return sementes_ausentes
 
 
-def baixar():
+def _baixar_sem_trava():
     # Invalida a base anterior antes de uma nova tentativa, inclusive se a rede cair.
     try:
         if os.path.lexists(MANIFESTO):
@@ -233,7 +236,7 @@ def _relatar_falha(caminho,erro):
     log('arquivo não confirmado:', 'id='+_id_caminho(caminho), 'motivo='+codigo)
 
 
-def subir():
+def _subir_sem_trava():
     if not os.path.isdir(PASTA):
         log("nada para subir")
         return 0
@@ -297,6 +300,54 @@ def subir():
         log("falha no manifesto:", _motivo_seguro(e))
     log(f"subidos {enviados}; sem edição necessária {iguais}; falhas/conflitos {erros}")
     return int(bool(erros))
+
+
+@contextmanager
+def _trava_local():
+    """Exclusão mútua entre sincronizadores que compartilham este checkout.
+
+    A trava é mantida por um descritor aberto durante a operação, inclusive
+    depois de erro; uma falha do processo libera o flock automaticamente.
+    Nunca remove nem substitui uma trava ocupada.
+    """
+    descritor = None
+    try:
+        descritor = os.open(
+            TRAVA_LOCAL, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600
+        )
+        info = os.fstat(descritor)
+        if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+                or stat.S_IMODE(info.st_mode) & 0o077):
+            raise FalhaSync("trava_local_insegura")
+        fcntl.flock(descritor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        atual = os.lstat(TRAVA_LOCAL)
+        if (atual.st_dev, atual.st_ino) != (info.st_dev, info.st_ino):
+            raise FalhaSync("trava_local_substituida")
+        yield
+    finally:
+        if descritor is not None:
+            os.close(descritor)
+
+
+def _executar_com_trava(operacao):
+    try:
+        with _trava_local():
+            return operacao()
+    except BlockingIOError:
+        log("sincronização bloqueada:", "trava_local_em_uso")
+    except FalhaSync as erro:
+        log("sincronização bloqueada:", erro.codigo)
+    except OSError as erro:
+        log("sincronização bloqueada:", _motivo_seguro(erro))
+    return 1
+
+
+def baixar():
+    return _executar_com_trava(_baixar_sem_trava)
+
+
+def subir():
+    return _executar_com_trava(_subir_sem_trava)
 
 
 def main(argv):
