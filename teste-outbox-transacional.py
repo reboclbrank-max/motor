@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Contratos offline da outbox; armazenamento e destino são sintéticos."""
 import base64
-import copy
 import json
 
 import comum as C
@@ -85,7 +84,7 @@ s = Cenario()
 r1 = O.executar(*s.args, enviar=s.enviar, observar=s.observar)
 r2 = O.executar(*s.args, enviar=s.enviar, observar=s.observar)
 checar("sucesso confirma e reentrada não duplica", s.envios == 1 and r1["enviado_agora"] and not r2["enviado_agora"])
-reg, sha = O.carregar(a if False else O.identidade(*s.args[:3]))
+reg, sha = O.carregar(O.identidade(*s.args[:3]))
 checar("registro final confirmado com uma tentativa", reg["estado"] == "confirmado" and reg["tentativas"] == 1)
 
 # Payload divergente para a mesma origem é recusado antes do destino.
@@ -141,17 +140,6 @@ checar("recibo confirmado ausente não reenvia", espera(O.EfeitoIncerto, lambda:
 
 # Corrida na criação: PUT gravou, mas a resposta 409 chegou; adotar registro idêntico.
 s = Cenario("8")
-s.repo.falhar_depois_put = lambda path, bruto: True
-# O fake devolve 500 acima; usar 409 específico para exercitar a adoção.
-original = s.repo.gh
-def perder_create(metodo, caminho, corpo=None):
-    if metodo == "PUT" and not s.repo.dados:
-        try:
-            return original(metodo, caminho, corpo)
-        finally:
-            pass
-    return original(metodo, caminho, corpo)
-# Substituição simples: primeiro PUT grava e informa 409.
 def create_409(metodo, caminho, corpo=None):
     if metodo == "PUT" and not s.repo.dados:
         path = caminho.split("/contents/", 1)[1]
@@ -159,7 +147,6 @@ def create_409(metodo, caminho, corpo=None):
         s.repo.dados[path] = {"sha": "corrida", "bruto": bruto}
         raise RuntimeError("GitHub API PUT → HTTP 409: já existe")
     return original(metodo, caminho, corpo)
-s.repo.falhar_depois_put = None
 C.gh = create_409
 reg, sha, criado = O.preparar(*s.args)
 checar("corrida na criação adota a mesma intenção", not criado and reg["estado"] == "preparado")
