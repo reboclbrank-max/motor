@@ -132,6 +132,33 @@ class Sincronizacao(unittest.TestCase):
                 self.assertEqual(S.subir(),0);self.assertEqual(len(self.puts),puts_antes)
             finally:os.chdir(anterior)
 
+    def sementes(self):
+        # A barreira offline exclui MEMORIA real por privacidade. Simular somente
+        # os dois nomes públicos com bytes fictícios e SHA exato desses bytes.
+        dados={caminho:('fixture publica '+str(i)).encode() for i,caminho in enumerate(S.SEMENTES_PUBLICAS)}
+        p=patch.object(S,'SEMENTES_PUBLICAS',{c:S._sha(v) for c,v in dados.items()})
+        p.start();self.addCleanup(p.stop)
+        for caminho, conteudo in dados.items():
+            Path(caminho).parent.mkdir(exist_ok=True);Path(caminho).write_bytes(conteudo)
+
+    def test_checkout_com_sementes_nao_bloqueia_nem_envia_copias_ausentes(self):
+        self.sementes();self.baixar();self.assertEqual(S.subir(),0)
+        self.assertEqual(set(self.store),{self.arq});self.assertFalse(self.puts)
+        for caminho,sha in S.SEMENTES_PUBLICAS.items():self.assertEqual(S._ler_base()[caminho],sha)
+
+    def test_sementes_exatas_podem_receber_versao_privada(self):
+        self.sementes()
+        for caminho in S.SEMENTES_PUBLICAS:self.store[caminho]=b'estado privado atual'
+        self.baixar()
+        for caminho in S.SEMENTES_PUBLICAS:self.assertEqual(Path(caminho).read_bytes(),b'estado privado atual')
+        self.assertEqual(S.subir(),0);self.assertFalse(self.puts)
+
+    def test_semente_editada_nao_recebe_excecao(self):
+        self.sementes();caminho=next(iter(S.SEMENTES_PUBLICAS))
+        Path(caminho).write_bytes(b'edicao local pendente')
+        self.assertEqual(S.baixar(),1);self.assertFalse(Path(self.arq).exists())
+        self.assertEqual(Path(caminho).read_bytes(),b'edicao local pendente')
+
     def test_download_confere_blob_e_base_fora_memoria(self):
         self.baixar();self.assertEqual(S._ler_base()[self.arq],S._sha(b'original'))
         self.assertFalse(Path('MEMORIA/.memoria-sync.json').exists())
