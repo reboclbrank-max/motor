@@ -193,11 +193,19 @@ def info():
 
 if __name__ == '__main__' and sys.argv[1:] == ['--gerar-isolado']:
     try:
-        import resource
-        resource.setrlimit(resource.RLIMIT_FSIZE, (200000, 200000))
         pedido = json.loads(sys.stdin.buffer.read(500001))
         MODELO, ARQUIVO, CACHE = pedido['modelo'], pedido['arquivo'], pedido['cache']
-        print(json.dumps(_gerar(pedido['pergunta'], pedido['system'],
-                                pedido['max_tokens'], pedido['contexto'])))
+        # A biblioteca não escreve no protocolo de saída (inclui stdout nativo).
+        original_stdout = os.dup(1)
+        try:
+            with open(os.devnull, 'wb') as silencioso:
+                os.dup2(silencioso.fileno(), 1)
+                resultado = _gerar(pedido['pergunta'], pedido['system'],
+                                   pedido['max_tokens'], pedido['contexto'])
+                sys.stdout.flush()
+        finally:
+            os.dup2(original_stdout, 1)
+            os.close(original_stdout)
+        print(json.dumps(resultado))
     except Exception as erro:
         print(json.dumps([None, 'motor local falhou: ' + type(erro).__name__]))
