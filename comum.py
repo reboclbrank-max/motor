@@ -103,6 +103,9 @@ OPENAI_COMPAT_KEY = _k("OPENAI_COMPAT_KEY")
 OPENAI_COMPAT_BASE = os.environ.get("OPENAI_COMPAT_BASE", "").strip().rstrip("/")
 OPENAI_COMPAT_MODELO = os.environ.get("OPENAI_COMPAT_MODEL", "").strip()
 CHAVE_LLM7 = _k("LLM7_API_KEY") or "unused"
+# A integração LLM7 fica bloqueada por padrão. O opt-in temporário existe apenas para
+# compatibilidade de testes e para uma decisão formal futura; nenhum workflow o define.
+LLM7_AUTORIZADO = os.environ.get("REBOCL_LLM7_AUTORIZADO") == "1"
 ZAI_KEY = _k("ZAI_API_KEY")
 SAMBA_KEY = _k("SAMBANOVA_API_KEY")
 GLAMA_KEY = _k("GLAMA_API_KEY")
@@ -2906,6 +2909,8 @@ def _ferramenta_testar(argo):
     if len(partes) != 2:
         return "Uso: [[TESTAR: https://api.llm7.io/v1 | nome-do-modelo]]"
     base, modelo = partes[0].strip().rstrip("/"), partes[1].strip()
+    if not LLM7_AUTORIZADO and _destino_llm7(base):
+        return "BLOQUEADO: integração LLM7 não autorizada; nenhuma chamada realizada."
     req = urllib.request.Request(base + "/chat/completions",
         data=json.dumps({"model": modelo, "messages": [{"role": "user", "content": "diga: ok"}],
                          "max_tokens": 16}).encode(),
@@ -2928,6 +2933,8 @@ def _ferramenta_plantar(argo):
     if len(partes) != 2:
         return "Uso: [[PLANTAR: https://base/v1 | modelo]] (teste antes com [[TESTAR:]])"
     base, modelo = partes[0].strip().rstrip("/"), partes[1].strip()
+    if not LLM7_AUTORIZADO and _destino_llm7(base):
+        return "BLOQUEADO: integração LLM7 não autorizada; cadastro inalterado."
     try:
         url=urllib.parse.urlsplit(base)
         if url.query or url.fragment or not modelo or any(ord(c)<32 for c in modelo):
@@ -3259,7 +3266,7 @@ def montar_provedores():
         extras = json.loads(ler_remoto("MEMORIA/motores-extras.json", "[]") or "[]")
     except Exception:
         extras = []
-    for i, modelo in enumerate([x for x in extras if isinstance(x, str) and x.strip()][:20]):
+    for i, modelo in enumerate([x for x in extras if LLM7_AUTORIZADO and isinstance(x, str) and x.strip()][:20]):
         provedores.append({"nome": f"LLM7 extra ({modelo})", "id": f"llm7-ex{i + 1}", "tipo": "llm7",
                            "base": BASE_LLM7, "chave": CHAVE_LLM7,
                            "modelos": [modelo], "modelo": modelo, "timeout": 90})
@@ -3305,9 +3312,7 @@ def montar_provedores():
                            "modelos": ["solar-pro2-251215", "solar-pro", "solar-mini"],
                            "modelo": "solar-pro2-251215", "timeout": 60})
 
-    provedores.append({"nome": "Pollinations (último recurso)", "id": "pollinations-get", "tipo": "pollinations-get",
-                       "base": "https://text.pollinations.ai", "chave": "sem-chave", "modelo": "openai-fast",
-                       "timeout": 50})
+    # O antigo fallback GET foi removido: ele colocava a mensagem do usuário na URL.
     # LLM7 EXPANDIDO: cada modelo do catálogo arquivado = um ROBÔ PRÓPRIO
     # (paralelo real no comitê — cada um tem sua janela de 429 independente)
     try:
@@ -3322,7 +3327,7 @@ def montar_provedores():
     _robos_catalogo = [m for m in catalogo
                        if isinstance(m, str) and m.strip() and m not in _ja_na_fila
                        and not any(x in m.lower() for x in _sem_chat)]
-    for i, modelo in enumerate(_robos_catalogo[:80]):
+    for i, modelo in enumerate((_robos_catalogo if LLM7_AUTORIZADO else [])[:80]):
         provedores.append({"nome": f"LLM7 ({modelo})", "id": f"llm7-c{i + 1}", "tipo": "llm7",
                            "base": BASE_LLM7, "chave": CHAVE_LLM7,
                            "modelos": [modelo], "modelo": modelo, "timeout": 90,
@@ -3409,11 +3414,12 @@ def montar_provedores():
                            "base": c["base"], "chave": "unused", "modelos": [c["modelo"]],
                            "modelo": c["modelo"], "timeout": 60, "so_comite": True})
 
-    # LLM7: reservas sem chave (dois modelos anônimos verificados em 07/10/2026)
-    provedores.append({"nome": "LLM7 (com token do dono)", "id": "llm7", "tipo": "llm7",
-                       "base": BASE_LLM7, "chave": CHAVE_LLM7,
-                       "modelos": ["GLM-5.3-Flash", "codestral-latest", "mistral-Nemo-Instruct-2407", "DeepSeek-V4-Flash-0731", "gpt-oss:20b", "nemotron-3-nano:30b"],
-                       "modelo": "GLM-5.3-Flash", "timeout": 90})
+    # LLM7 só entra na fila após autorização explícita; por padrão não há rota ativa.
+    if LLM7_AUTORIZADO:
+        provedores.append({"nome": "LLM7 (com token do dono)", "id": "llm7", "tipo": "llm7",
+                           "base": BASE_LLM7, "chave": CHAVE_LLM7,
+                           "modelos": ["GLM-5.3-Flash", "codestral-latest", "mistral-Nemo-Instruct-2407", "DeepSeek-V4-Flash-0731", "gpt-oss:20b", "nemotron-3-nano:30b"],
+                           "modelo": "GLM-5.3-Flash", "timeout": 90})
     if HUGGINGFACE_KEY:
         provedores.append({"nome": f"HuggingFace ({HUGGINGFACE_MODELO})", "id": "huggingface", "tipo": "openai",
                            "base": "https://router.huggingface.co/v1", "chave": HUGGINGFACE_KEY,
@@ -3518,7 +3524,18 @@ def _chamar_gemini(p, mensagens, system, modelo=None):
     return ""
 
 
+def _destino_llm7(base):
+    try:
+        host = (urllib.parse.urlsplit(str(base or "")).hostname or "").lower()
+        rele = (os.environ.get("RELE_LLM7") or "").rstrip("/")
+        return host == "llm7.io" or host.endswith(".llm7.io") or bool(rele and str(base or "").rstrip("/") == rele)
+    except Exception:
+        return False
+
+
 def _chamar_openai(p, mensagens, system, modelo=None):
+    if not LLM7_AUTORIZADO and _destino_llm7(p.get("base")):
+        raise RuntimeError("LLM7 bloqueado por política: integração não autorizada")
     rota = p.get("rota", "/chat/completions")
     url = p["base"].rstrip("/") + rota
     corpo = {
@@ -3574,6 +3591,8 @@ def _chamar_quillbot(p, mensagens, system):
 
 def _chamar_provedor(p, mensagens, system):
     """Chama o motor; se ele tiver vários modelos, tenta cada um antes de desistir."""
+    if p.get("tipo") == "llm7" and not LLM7_AUTORIZADO:
+        raise RuntimeError("LLM7 bloqueado por política: integração não autorizada")
     if p.get("tipo") == "pollinations-get":
         return _chamar_pollinations_get(p, mensagens, system)
     if p.get("tipo") == "llm7":
@@ -3594,24 +3613,8 @@ def _chamar_provedor(p, mensagens, system):
 
 
 def _chamar_pollinations_get(p, mensagens, system):
-    """Último recurso: rota GET do Pollinations (grátis só para prompts triviais —
-    perguntas reais costumam dar 500/402; se falhar, os erros anteriores da fila já contam)."""
-    ultima = ""
-    for m in reversed(mensagens):
-        if m.get("role") == "user":
-            ultima = str(m.get("content") or m.get("reasoning_content") or "")
-            break
-    if not ultima:
-        raise RuntimeError("pollinations GET: sem mensagem")
-    prompt = (ultima[:900] + "\n\n(Responda em português do Brasil.)") if len(ultima) < 900 else ultima[:900]
-    url = ("https://text.pollinations.ai/" + urllib.parse.quote(prompt) +
-           "?referrer=reboclbrank&model=" + p.get("modelo", "openai-fast") +
-           "&seed=%d" % int(time.time() % 99991))
-    bruto, _, _ = _buscar_bytes(url, {"User-Agent": UA_BOT}, limite=200000, timeout=p.get("timeout", 50))
-    texto = bruto.decode("utf-8", "replace").strip()
-    if not texto or texto.startswith("{") or texto.startswith("<"):
-        raise RuntimeError("pollinations GET: resposta vazia/pago (402/500) — motor em paywall")
-    return texto
+    """Removido: nenhuma mensagem pode ser inserida em URL de provedor externo."""
+    raise RuntimeError("fallback Pollinations GET desativado por privacidade")
 
 
 _RE_CODIGO = re.compile(r"```|\bdef \b|\bpython\b|\bjavascript\b|\bgodot\b|\bgdscript\b|\bunity\b|"
@@ -3634,6 +3637,8 @@ def _chamar_llm7(p, mensagens, system):
     """Reserva sem chave (LLM7, token anônimo 'unused'). Modelos 'pensantes': se o texto
     final vier vazio, aproveita o miolo do raciocínio. Rota por força: pergunta de
     código tenta o codestral primeiro. Tenta todos os modelos da lista."""
+    if not LLM7_AUTORIZADO:
+        raise RuntimeError("LLM7 bloqueado por política: integração não autorizada")
     modelos = list(p.get("modelos") or [p.get("modelo", "GLM-5.3-Flash")])
     ultima = ""
     for m in reversed(mensagens or []):
@@ -3655,6 +3660,8 @@ def _chamar_llm7(p, mensagens, system):
 
 
 def _chamar_llm7_modelo(p, mensagens, system, modelo):
+    if not LLM7_AUTORIZADO:
+        raise RuntimeError("LLM7 bloqueado por política: integração não autorizada")
     corpo = {
         "model": modelo,
         "messages": [{"role": "system", "content": system}] + mensagens,
@@ -3870,16 +3877,17 @@ def chamar_llm(mensagens, system=None, forcar_teste=False, preferir=None, exclui
         return _limpar_pensar(reserva_recusa[0]), reserva_recusa[1], None
     # SALVA-VIDAS: todos falharam → tenta o seletor durável "default" da llm7
     # (cota própria e separada, documentada; provado vivo em 10/10/2026 com tudo 429)
-    try:
-        _sv = {"nome": "LLM7 default (salva-vidas)", "id": "llm7-default", "tipo": "llm7",
-               "base": (os.environ.get("RELE_LLM7") or "https://api.llm7.io/v1").rstrip("/"),
-               "chave": CHAVE_LLM7, "modelos": ["default"],
-               "modelo": "default", "timeout": 60}
-        texto = _chamar_provedor(_sv, mensagens, system)
-        if texto and texto.strip():
-            return texto.strip(), "llm7-default", None
-    except Exception as e:
-        ultimo_erro = e
+    if LLM7_AUTORIZADO:
+        try:
+            _sv = {"nome": "LLM7 default (salva-vidas)", "id": "llm7-default", "tipo": "llm7",
+                   "base": (os.environ.get("RELE_LLM7") or "https://api.llm7.io/v1").rstrip("/"),
+                   "chave": CHAVE_LLM7, "modelos": ["default"],
+                   "modelo": "default", "timeout": 60}
+            texto = _chamar_provedor(_sv, mensagens, system)
+            if texto and texto.strip():
+                return texto.strip(), "llm7-default", None
+        except Exception as e:
+            ultimo_erro = e
     # ÚLTIMO RECURSO: motor local no próprio runner. Sem chave, sem cota, sem 429.
     # Medido a 26 tok/s (Qwen 1.5B Q4): 300 tokens em ~11 s. Entra só quando todos os
     # remotos falharam, e se a biblioteca/modelo não estiverem prontos devolve None sem

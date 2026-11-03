@@ -72,7 +72,7 @@ def poços_sem_chave():
             saida.append({"id": "polli-" + modelo.replace("/", "-")[:40], "base": BASE_POLLI,
                           "modelo": modelo, "chave": "unused", "tipo": "openai",
                           "familia": "pollinations"})
-        elif ":" not in nome:
+        elif ":" not in nome and C.LLM7_AUTORIZADO:
             saida.append({"id": "llm7-" + nome.replace("/", "-")[:40], "base": BASE_LLM7,
                           "modelo": nome, "chave": os.environ.get("LLM7_API_KEY") or "unused",
                           "tipo": "openai", "familia": "llm7"})
