@@ -9,6 +9,7 @@ name: testes (a suíte inteira)
 # Testes não sincronizam memória sintética com a memória real.
 
 on:
+  pull_request:
   workflow_dispatch:
 
 permissions:

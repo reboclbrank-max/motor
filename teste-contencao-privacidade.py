@@ -79,6 +79,8 @@ checar("prova de fogo registra bloqueio sem sondar LLM7", estado == "bloqueado_p
 workflow = Path(".github/workflows/piloto.yml").read_text(encoding="utf-8")
 checar("piloto legado sem agenda", "schedule:" not in workflow and "cron:" not in workflow)
 checar("piloto exige confirmação humana explícita", "inputs.confirmacao == 'PUBLICAR'" in workflow)
+testes_workflow = Path(".github/workflows/testes.yml").read_text(encoding="utf-8")
+checar("barreira de contratos também roda em pull requests", "  pull_request:\n" in testes_workflow)
 
 # O opt-in é apenas compatibilidade controlada; o teste não faz chamada real.
 C.LLM7_AUTORIZADO = True
