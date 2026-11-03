@@ -27,10 +27,12 @@ def _copiar_verificado(origem, destino, digest_esperado):
             if not dados:
                 break
             hash_lido.update(dados)
-            with os.fdopen(os.dup(escrita), "wb", closefd=True) as f:
-                f.write(dados)
-        # O descritor de destino é compartilhado entre dup: cada bloco avança
-        # a mesma posição, sem truncar o arquivo existente.
+            posicao = 0
+            while posicao < len(dados):
+                escritos = os.write(escrita, dados[posicao:])
+                if escritos <= 0:
+                    raise OSError("ensaio: escrita incompleta")
+                posicao += escritos
         os.fsync(escrita)
         depois = os.fstat(leitura)
         atual = os.lstat(origem)
