@@ -104,6 +104,33 @@ def _parar_batida():
         _BATIDA = None
 
 
+def _outbox_comentarios_ativo():
+    """Opt-in explícito; nenhum workflow define esta variável neste corte."""
+    return os.environ.get("REBOCL_OUTBOX_COMENTARIOS") == "1"
+
+
+def _publicar_com_outbox(numero, corpo, marca, pendente, editar):
+    """Fiação real isolada; só é alcançada após o opt-in explícito."""
+    import outbox_comentarios as A
+
+    def paginar(conversa, pagina):
+        return C.gh("GET", f"/repos/{C.REPO}/issues/{conversa}/comments?per_page=100&page={pagina}")
+
+    def publicar(conversa, payload):
+        # POST direto preserva byte a byte o payload reconciliado; C.comentar poderia
+        # acrescentar outra marca depois que o hash da outbox já tivesse sido fixado.
+        resposta = C.gh("POST", f"/repos/{C.REPO}/issues/{conversa}/comments", {"body": payload})
+        if not isinstance(resposta, dict) or not resposta.get("id"):
+            raise RuntimeError("comentário publicado sem id observável")
+        return resposta
+
+    def editar_existente(ident, payload):
+        return {"id": ident} if C.editar_comentario(ident, payload) else None
+
+    return A.executar(numero, corpo, marca, pendente=pendente, editar=editar, shadow=False,
+                      publicar=publicar, editar_comentario=editar_existente, paginar=paginar)
+
+
 def responder(numero, texto, marca, extra="", editar=None, pendente=False):
     """Publica a resposta — com rodapé e marca invisível de dedupe.
 
@@ -128,6 +155,9 @@ def responder(numero, texto, marca, extra="", editar=None, pendente=False):
                     break
     else:
         corpo += f"\n\n{MARCA_ABERTURA}{marca}-->"
+    if _outbox_comentarios_ativo():
+        # Não existe fallback para POST depois de um resultado incerto de edição.
+        return _publicar_com_outbox(numero, corpo, marca, pendente, editar)
     if editar and C.editar_comentario(editar, corpo):
         return
     C.comentar(numero, corpo)

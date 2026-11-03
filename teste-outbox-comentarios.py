@@ -54,6 +54,7 @@ class Cenario:
         C.REPO = "sintetico/conversas"
         C.DONO_GITHUB = "dono-sintetico"
         C.ASSINATURA = "🤖 **Assistente Rebocl**"
+        C.MARCA_DO_ROBO = "<!--robo:"
         self.marca = marca
         self.comentarios = []
         self.envios = 0
@@ -158,6 +159,12 @@ pagina = [{"id": 1, "body": "x", "user": {"login": "alguem"}}] * 100
 def repetida(numero, numero_pagina):
     return pagina
 checar("paginação repetida não vira ausência", espera(RuntimeError, lambda: A.executar(1, s.corpo, s.marca, shadow=False, publicar=s.publicar, paginar=repetida)) and s.envios == 0)
+
+# Pendente preserva a marca de robô que C.comentar acrescentava no fluxo legado.
+s = Cenario("a9")
+corpo_pendente = C.ASSINATURA + "\n\naguardando\n\n<!--pendente:a9-->"
+op = A.operacao(1, corpo_pendente, s.marca, pendente=True)
+checar("payload pendente preserva marca de robô uma única vez", op["payload"]["body"].count(C.MARCA_DO_ROBO) == 1 and A.marcador(op["id"]) in op["payload"]["body"])
 
 # Entrada inválida não chega à outbox.
 checar("origem e conversa inválidas são recusadas", espera(ValueError, lambda: A.operacao(0, s.corpo, "x")))
