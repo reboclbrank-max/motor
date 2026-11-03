@@ -385,4 +385,7 @@ def normalizar_reparo(v,anterior):
  delta=validar_arquivos(v['arquivos'],parcial=True)
  for n,txt in anterior.items():
   if n.startswith('test_') and n in delta and delta[n]!=txt:raise Revisao('Reparo tentou trocar testes anteriores; não executar.')
- fs=dict(anterior);fs.update(delta);return validar_arquivos(fs)
+ fs=dict(anterior);fs.update(delta)
+ if fs==anterior:raise Revisao('Reparo sem mudança; preservar histórico e solicitar revisão, sem nova CI.')
+ return validar_arquivos(fs)
+
