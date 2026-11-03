@@ -13,3 +13,6 @@ A auditoria encontrou dois problemas verificáveis: o workflow não oferecia a v
 Esta mudança **não comprova restauração de espelhos reais** nem recuperação de desastre. A comparação observada encontrou itens extras em agente-espelho: uma execução nesse estado será recusada até revisão, sem exclusão automática. Não executamos o workflow manual nem lemos conteúdo privado dos arquivos. Falhas concorrentes de escrita remota podem ainda bloquear push; não há transação em dois repositórios.
 
 Rollback: reverter PR pelo processo normal e conferir pin da agenda do Agente com o Motor aprovado; manter conteúdo e histórico dos espelhos.
+
+## Complemento — menor exposição de credencial nos subprocessos Git
+Depois de clonar as fontes com autorização, os comandos locais `git add`, `git status` e `git commit` recebem somente um ambiente com PATH/HOME/idioma/TMPDIR e `GIT_TERMINAL_PROMPT=0`, sem token ou extraheader. O `git push` continua recebendo a autenticação efêmera, por ser uma operação remota. Teste adicional usa segredo falso e verifica presença somente no push. Não houve troca, rotação ou leitura do valor real da credencial.

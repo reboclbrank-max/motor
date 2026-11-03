@@ -62,6 +62,14 @@ def _fotografia(raiz):
     return vistos, pastas
 
 
+def _ambiente_git_local():
+    """Subprocessos locais não precisam de PAT, extraheader ou chaves de canal."""
+    allow = ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR")
+    ambiente = {nome: os.environ[nome] for nome in allow if nome in os.environ}
+    ambiente["GIT_TERMINAL_PROMPT"] = "0"
+    return ambiente
+
+
 def sincronizar_caminhos(orig, esp, push=True, env=None):
     """Não apaga espelho; bloqueia arquivos extras e cópia não verificada."""
     fonte, dirs_fonte = _fotografia(orig)
@@ -81,13 +89,14 @@ def sincronizar_caminhos(orig, esp, push=True, env=None):
     fonte_apos, _ = _fotografia(orig)
     if copia != fonte or fonte_apos != fonte:
         raise RuntimeError("espelho: conferencia de bytes falhou")
-    _git(["add", "-A"], cwd=esp, env=env)
-    status = _git(["status", "--porcelain"], cwd=esp, env=env)
+    ambiente_local = _ambiente_git_local()
+    _git(["add", "-A"], cwd=esp, env=ambiente_local)
+    status = _git(["status", "--porcelain"], cwd=esp, env=ambiente_local)
     if not status.strip():
         return False
     _git(["-c", "user.name=Espelho (agente)",
           "-c", "user.email=agente@reboclbrank.local",
-          "commit", "-q", "-m", "espelho: sincronizado"], cwd=esp, env=env)
+          "commit", "-q", "-m", "espelho: sincronizado"], cwd=esp, env=ambiente_local)
     if push:
         _git(["push", "-q", "origin", "HEAD:main"], cwd=esp, env=env)
     return True

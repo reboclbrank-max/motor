@@ -65,4 +65,25 @@ class IntegridadeEspelho(unittest.TestCase):
    git.assert_not_called()
   self.assertEqual((self.dst/'a.txt').read_text(),'antigo')
 
+
+ def test_git_local_nao_herda_credenciais_e_push_mantem_token(self):
+  (self.src/'a.txt').write_text('novo')
+  (self.dst/'a.txt').write_text('velho')
+  confianca={'GIT_CONFIG_COUNT':'1','GIT_CONFIG_KEY_0':'http.https://github.com/.extraheader',
+             'GIT_CONFIG_VALUE_0':'SEGREDO_TESTE'}
+  with patch.dict(E.os.environ,{'CHAT_TOKEN':'SEGREDO_TESTE','PAT_MEMORIA':'SEGREDO_TESTE',
+                                'GIT_CONFIG_VALUE_0':'SEGREDO_TESTE'}), \
+       patch.object(E,'_git',side_effect=lambda args,**kw:' M a.txt\n' if args[:2]==['status','--porcelain'] else '') as git:
+   self.assertTrue(E.sincronizar_caminhos(str(self.src),str(self.dst),push=True,env=confianca))
+  locais=[x for x in git.call_args_list if x.args[0][0]!='push']
+  remoto=[x for x in git.call_args_list if x.args[0][0]=='push']
+  self.assertEqual(len(remoto),1)
+  self.assertEqual(remoto[0].kwargs['env']['GIT_CONFIG_VALUE_0'],'SEGREDO_TESTE')
+  for chamada in locais:
+   ambiente=chamada.kwargs['env']
+   self.assertNotIn('CHAT_TOKEN',ambiente)
+   self.assertNotIn('PAT_MEMORIA',ambiente)
+   self.assertNotIn('GIT_CONFIG_VALUE_0',ambiente)
+   self.assertNotIn('SEGREDO_TESTE',str(ambiente))
+
 if __name__=='__main__':unittest.main()
