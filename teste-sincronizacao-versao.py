@@ -36,6 +36,41 @@ class Sincronizacao(unittest.TestCase):
             return {'content':{'sha':S._sha(v)}}
         raise AssertionError('rota não simulada')
     def baixar(self):self.assertEqual(S.baixar(),0)
+    def test_get_recupera_503_transitorio_sem_logar_segredo(self):
+        class Resposta:
+            def __enter__(self): return self
+            def __exit__(self, *args): return False
+            def read(self): return b'{"ok": true}'
+        erro = urllib.error.HTTPError('url-privada', 503, 'indisponivel', None, None)
+        with patch.object(S, 'TOKEN', 'valor-ficticio'), \
+             patch.object(S.urllib.request, 'urlopen', side_effect=[erro, Resposta()]) as abrir, \
+             patch.object(S.time, 'sleep') as dormir:
+            self.assertEqual(S._http('GET', '/rota-publica'), {'ok': True})
+            self.assertEqual(abrir.call_count, 2)
+            dormir.assert_called_once_with(0.5)
+
+    def test_get_401_nao_tenta_repetir_credencial_rejeitada(self):
+        erro = urllib.error.HTTPError('url-privada', 401, 'bloqueado', None, None)
+        with patch.object(S, 'TOKEN', 'valor-ficticio'), \
+             patch.object(S.urllib.request, 'urlopen', side_effect=erro) as abrir, \
+             patch.object(S.time, 'sleep') as dormir:
+            with self.assertRaises(urllib.error.HTTPError):
+                S._http('GET', '/rota-publica')
+            self.assertEqual(abrir.call_count, 1)
+            dormir.assert_not_called()
+        self.assertEqual(S._motivo_seguro(erro), 'http_401')
+
+    def test_put_com_erro_de_rede_nao_e_repetido(self):
+        erro = urllib.error.URLError('sem rede')
+        with patch.object(S, 'TOKEN', 'valor-ficticio'), \
+             patch.object(S.urllib.request, 'urlopen', side_effect=erro) as abrir, \
+             patch.object(S.time, 'sleep') as dormir:
+            with self.assertRaises(urllib.error.URLError):
+                S._http('PUT', '/rota-publica', {'conteudo': 'ficticio'})
+            self.assertEqual(abrir.call_count, 1)
+            dormir.assert_not_called()
+        self.assertEqual(S._motivo_seguro(erro), 'rede_indisponivel')
+
     def test_download_confere_blob_e_base_fora_memoria(self):
         self.baixar();self.assertEqual(S._ler_base()[self.arq],S._sha(b'original'))
         self.assertFalse(Path('MEMORIA/.memoria-sync.json').exists())
