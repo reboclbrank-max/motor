@@ -36,7 +36,7 @@ jobs:
       - name: Barreira offline (sem rede, sem segredo)
         run: |
           falhas=0
-          for t in teste-casa.py teste-cerebro.py teste-orquestrador.py \
+          for t in teste-contencao-privacidade.py teste-casa.py teste-cerebro.py teste-orquestrador.py \
                    teste-fila.py teste-estudo.py teste-palcos.py teste-piloto.py \
                    teste-semantica.py teste-caca.py teste-divulgacao.py teste-v37.py \
                    teste-responder-emergencia.py teste-vitrine.py teste-exatidao.py teste-confianca.py \

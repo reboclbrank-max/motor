@@ -33,6 +33,8 @@ def _modelo_vivo(modelo):
 
 
 def varrer():
+    if not C.LLM7_AUTORIZADO:
+        return "Varredura LLM7 bloqueada por política; nenhuma chamada ou alteração realizada."
     try:
         extras = json.loads(C.ler_remoto(ARQ_EXTRAS, "[]") or "[]")
     except Exception:

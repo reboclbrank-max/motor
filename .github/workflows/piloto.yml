@@ -9,9 +9,14 @@ name: piloto automático
 # Cuida das tarefas de piloto automático: o que a casa faria sozinha todo dia.
 
 on:
-  schedule:
-    - cron: '0 */6 * * *'
+  # Contenção da fase 0: sem execução agendada. O workflow também está desativado
+  # remotamente durante a migração; reativá-lo não inicia um ciclo automático.
   workflow_dispatch:
+    inputs:
+      confirmacao:
+        description: "Digite PUBLICAR para autorizar este ciclo legado"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -22,7 +27,7 @@ concurrency:
 
 jobs:
   rodar:
-    if: github.event_name == 'schedule' || github.actor == 'reboclbrank-max'
+    if: github.actor == 'reboclbrank-max' && inputs.confirmacao == 'PUBLICAR'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:

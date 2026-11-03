@@ -165,6 +165,9 @@ def disparar():
     """Bate em cada provedor que tenha chave. Provedor sem chave não é falha: é ausente."""
     resultado, vivos, testados = {}, [], 0
     for nome, base, modelos, var in PROVEDORES:
+        if nome == "llm7" and not C.LLM7_AUTORIZADO:
+            resultado[nome] = {"estado": "bloqueado_por_politica", "detalhe": "integração não autorizada"}
+            continue
         chave = C._k(var)  # mesma porta única usada por todo o motor
         if not chave:
             resultado[nome] = {"estado": "sem chave", "detalhe": f"{var} não configurada"}

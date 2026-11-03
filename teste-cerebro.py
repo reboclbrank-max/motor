@@ -24,7 +24,8 @@ def checar(nome, cond):
     ok = ok and cond
 
 
-# ---- rota por força: código tenta codestral primeiro ----
+# ---- rota por força: compatibilidade somente com opt-in explícito de teste ----
+C.LLM7_AUTORIZADO = True
 ordem = []
 C._chamar_llm7_modelo = lambda p, mensagens, system, modelo: ordem.append(modelo) or "resposta"
 p_llm7 = {"modelos": ["GLM-5.3-Flash", "gemma4:31b", "codestral-latest"]}
