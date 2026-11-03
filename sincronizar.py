@@ -9,6 +9,7 @@ import base64
 import hashlib
 import json
 import os
+import stat
 import sys
 import tempfile
 import time
@@ -117,6 +118,25 @@ def listar_remoto():
         return None
 
 
+def _conferir_destino_download(remoto):
+    """Reuso só com cópias idênticas; nunca decide descartar edição ou órfão."""
+    if not os.path.lexists(PASTA):
+        return
+    if os.path.islink(PASTA) or not os.path.isdir(PASTA):
+        raise FalhaSync("destino_local_inseguro")
+    def falhou(erro):
+        raise erro
+    for raiz, pastas, arquivos in os.walk(PASTA, followlinks=False, onerror=falhou):
+        for nome in pastas + arquivos:
+            caminho = os.path.join(raiz, nome).replace(os.sep, "/")
+            modo = os.lstat(caminho).st_mode
+            if stat.S_ISLNK(modo) or not (stat.S_ISDIR(modo) or stat.S_ISREG(modo)):
+                raise FalhaSync("destino_local_inseguro")
+            if stat.S_ISREG(modo):
+                if caminho not in remoto or _sha(_ler_local(caminho)) != remoto[caminho]:
+                    raise FalhaSync("memoria_local_divergente_requer_revisao")
+
+
 def baixar():
     # Invalida a base anterior antes de uma nova tentativa, inclusive se a rede cair.
     try:
@@ -127,6 +147,14 @@ def baixar():
         return 1
     remoto = listar_remoto()
     if remoto is None:
+        return 1
+    try:
+        # Pré-verificação integral antes de alterar qualquer arquivo da memória.
+        # Cópia parcial idêntica pode retomar; divergência exige revisão/cópia limpa.
+        _conferir_destino_download(remoto)
+    except Exception as e:
+        codigo = e.codigo if isinstance(e, FalhaSync) else _motivo_seguro(e)
+        log("download bloqueado; arquivos locais preservados:", codigo)
         return 1
     base, erros = {}, 0
     for caminho, sha in sorted(remoto.items()):
@@ -269,3 +297,4 @@ def main(argv):
 
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv))
+
