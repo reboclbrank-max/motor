@@ -66,7 +66,7 @@ def baixar():
         return None
 
 
-def _carregar():
+def _carregar(contexto=2048):
     global _llm, _falhou
     if _llm is not None or _falhou:
         return _llm
@@ -80,7 +80,7 @@ def _carregar():
                 _falhou = True
                 return None
             threads = os.cpu_count() or 4
-            _llm = Llama(model_path=caminho, n_ctx=2048, n_threads=threads,
+            _llm = Llama(model_path=caminho, n_ctx=contexto, n_threads=threads,
                          n_batch=256, n_threads_batch=threads, verbose=False)
         except Exception:
             _falhou = True
@@ -88,9 +88,10 @@ def _carregar():
     return _llm
 
 
-def responder(pergunta, system="", max_tokens=420, timeout_s=120):
+def responder(pergunta, system="", max_tokens=420, timeout_s=120, contexto=2048):
     """Gera a resposta. Devolve (texto, None) ou (None, motivo)."""
-    llm = _carregar()
+    if contexto not in (2048,4096):return None, "contexto local não permitido"
+    llm = _carregar(contexto)
     if llm is None:
         return None, "motor local indisponível"
     mensagens = []

@@ -100,4 +100,15 @@ class Componentes(unittest.TestCase):
   with patch.object(motor_local,'baixar',return_value='/fixture'),patch.object(motor_local,'responder',return_value=('def formatar(:',None)):
    with F.modelo_local({'plano':{'arquivos':{'formatador.py':F.BASELINE}}},{}):
     texto,_,_=C.chamar_llm([]);self.assertEqual(json.loads(texto)['arquivos']['formatador.py'],'def formatar(:\n')
+ def test_feedback_ci_chega_ao_modelo_local(self):
+  import motor_local
+  with patch.object(motor_local,'baixar',return_value='/fixture'),patch.object(motor_local,'responder',return_value=('def formatar(dados):return ""',None)) as local:
+   with F.modelo_local({'plano':{'arquivos':{'formatador.py':F.BASELINE}}},{'detalhes':'ERRO_REAL_EXATO'}):C.chamar_llm([])
+   self.assertIn('ERRO_REAL_EXATO',local.call_args.args[0]);self.assertEqual(local.call_args.kwargs['contexto'],4096)
+ def test_reparos_autorizados_derivam_do_teto8_sem_mudar_projetos_comuns(self):
+  p=dict(self.p,limite_modelo=8,aprovacao_orcamento='dono-ampliar-local-8-preserva-3')
+  self.assertEqual(A._LIMITE_REPAROS.get(),2)
+  with patch.object(F,'politica',return_value=p):
+   with F.modelo_local({'plano':{'arquivos':{'formatador.py':F.BASELINE}}},{}):self.assertEqual(A._LIMITE_REPAROS.get(),7)
+  self.assertEqual(A._LIMITE_REPAROS.get(),2)
 if __name__=='__main__':unittest.main()
