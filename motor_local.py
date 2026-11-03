@@ -19,6 +19,10 @@ Cuidados:
 import json
 import os
 import threading
+import subprocess
+import sys
+import tempfile
+import math
 
 MODELO = os.environ.get(
     "MOTOR_LOCAL_MODELO",
@@ -30,6 +34,7 @@ MIN_BYTES = 50_000_000
 
 _trava = threading.Lock()
 _llm = None
+_configuracao = None
 _falhou = False
 
 
@@ -51,28 +56,45 @@ def disponivel():
 
 
 def baixar():
-    """Baixa o modelo para o cache. Devolve o caminho ou None."""
+    """Download atômico: arquivo parcial nunca vira cache válido."""
     import urllib.request
     os.makedirs(CACHE, exist_ok=True)
+    if os.path.basename(ARQUIVO) != ARQUIVO:
+        return None
     destino = os.path.join(CACHE, ARQUIVO)
-    if os.path.exists(destino) and os.path.getsize(destino) > MIN_BYTES:
+    if os.path.isfile(destino) and os.path.getsize(destino) > MIN_BYTES:
         return destino
+    temporario = None
     try:
         req = urllib.request.Request(MODELO, headers={"User-Agent": "motor-local/1.0"})
-        with urllib.request.urlopen(req, timeout=900) as r, open(destino, "wb") as f:
-            f.write(r.read())
+        with urllib.request.urlopen(req, timeout=90) as r:
+            with tempfile.NamedTemporaryFile(dir=CACHE, delete=False) as f:
+                temporario = f.name
+                while True:
+                    bloco = r.read(1024 * 1024)
+                    if not bloco:
+                        break
+                    f.write(bloco)
+        if os.path.getsize(temporario) <= MIN_BYTES:
+            return None
+        os.replace(temporario, destino)
         return destino
     except Exception:
         return None
+    finally:
+        if temporario and os.path.exists(temporario):
+            os.unlink(temporario)
 
 
 def _carregar(contexto=2048):
-    global _llm, _falhou
-    if _llm is not None or _falhou:
-        return _llm
+    global _llm, _falhou, _configuracao
+    config = (MODELO, ARQUIVO, contexto)
     with _trava:
-        if _llm is not None or _falhou:
+        if _configuracao == config and (_llm is not None or _falhou):
             return _llm
+        if _llm is not None:
+            _llm.close()
+        _llm, _falhou, _configuracao = None, False, config
         try:
             from llama_cpp import Llama
             caminho = baixar()
@@ -88,23 +110,69 @@ def _carregar(contexto=2048):
     return _llm
 
 
-def responder(pergunta, system="", max_tokens=420, timeout_s=120, contexto=2048):
-    """Gera a resposta. Devolve (texto, None) ou (None, motivo)."""
-    if contexto not in (2048,4096):return None, "contexto local não permitido"
+def _gerar(pergunta, system, max_tokens, contexto):
     llm = _carregar(contexto)
     if llm is None:
         return None, "motor local indisponível"
+    # Reserva conservadora para o template do chat. Não cortar requisitos/código.
+    tokens = len(llm.tokenize((system + "\n" + pergunta).encode('utf-8')))
+    if tokens + max_tokens + 256 > contexto:
+        return None, "contexto local insuficiente; entrada preservada, não truncada"
     mensagens = []
     if system:
-        mensagens.append({"role": "system", "content": system[:2000]})
-    mensagens.append({"role": "user", "content": str(pergunta)[:4000]})
+        mensagens.append({"role": "system", "content": system})
+    mensagens.append({"role": "user", "content": pergunta})
     try:
         saida = llm.create_chat_completion(messages=mensagens, max_tokens=max_tokens,
                                            temperature=0.4)
         texto = (saida["choices"][0]["message"]["content"] or "").strip()
         return (texto or None), (None if texto else "motor local devolveu vazio")
     except Exception as e:
-        return None, f"motor local falhou: {str(e)[:120]}"
+        return None, "motor local falhou: " + type(e).__name__
+
+
+def _executar_limitado(comando, dados, timeout_s, env):
+    # stdout em arquivo temporário evita crescimento sem limite na memória do host.
+    with tempfile.TemporaryFile() as saida:
+        r = subprocess.run(comando, input=dados, stdout=saida,
+                           stderr=subprocess.DEVNULL, timeout=timeout_s, env=env)
+        saida.seek(0)
+        bruto = saida.read(200001)
+    if r.returncode or len(bruto) > 200000:
+        raise ValueError("saída local inválida")
+    return json.loads(bruto)
+
+
+def responder(pergunta, system="", max_tokens=420, timeout_s=120, contexto=2048):
+    """Processo cancelável sem credenciais; timeout inclui carga e geração.
+
+    Pesos em disco continuam em cache. O modelo é descarregado a cada chamada,
+    trocando latência de carga por cancelamento real e isolamento da configuração.
+    """
+    if contexto not in (2048, 4096):
+        return None, "contexto local não permitido"
+    if (type(max_tokens) is not int or not 1 <= max_tokens <= 4096 or
+            type(timeout_s) not in (int, float) or not math.isfinite(timeout_s) or
+            not 0 < timeout_s <= 300):
+        return None, "limites locais inválidos"
+    pergunta, system = str(pergunta), str(system)
+    if len(pergunta) + len(system) > 100000:
+        return None, "entrada local excede limite; não truncada"
+    env = {k: os.environ[k] for k in ('PATH', 'HOME', 'LANG', 'LD_LIBRARY_PATH') if k in os.environ}
+    dados = json.dumps(dict(pergunta=pergunta, system=system, max_tokens=max_tokens,
+                           contexto=contexto, modelo=MODELO, arquivo=ARQUIVO,
+                           cache=CACHE)).encode('utf-8')
+    try:
+        resultado = _executar_limitado([sys.executable, '-I', os.path.abspath(__file__),
+                                        '--gerar-isolado'], dados, timeout_s, env)
+        if (not isinstance(resultado, list) or len(resultado) != 2 or
+                any(x is not None and not isinstance(x, str) for x in resultado)):
+            raise ValueError('recibo local inválido')
+        return tuple(resultado)
+    except subprocess.TimeoutExpired:
+        return None, "motor local excedeu tempo limite; processo encerrado"
+    except Exception as e:
+        return None, "motor local indisponível: " + type(e).__name__
 
 
 def info():
@@ -120,3 +188,16 @@ def info():
         motivo = "modelo será baixado no primeiro uso"
     return {"arquivo": ARQUIVO, "pronto": pronto, "mb": tamanho,
             "baixado": tem_modelo, "motivo": motivo}
+
+
+
+if __name__ == '__main__' and sys.argv[1:] == ['--gerar-isolado']:
+    try:
+        import resource
+        resource.setrlimit(resource.RLIMIT_FSIZE, (200000, 200000))
+        pedido = json.loads(sys.stdin.buffer.read(500001))
+        MODELO, ARQUIVO, CACHE = pedido['modelo'], pedido['arquivo'], pedido['cache']
+        print(json.dumps(_gerar(pedido['pergunta'], pedido['system'],
+                                pedido['max_tokens'], pedido['contexto'])))
+    except Exception as erro:
+        print(json.dumps([None, 'motor local falhou: ' + type(erro).__name__]))
