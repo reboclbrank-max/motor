@@ -10,6 +10,7 @@ import contextlib
 from pathlib import Path
 from unittest.mock import patch
 import sincronizar as S
+_HTTP_ORIGINAL = S._http  # captura antes do setUp substituir o transporte
 
 
 class Sincronizacao(unittest.TestCase):
@@ -45,7 +46,7 @@ class Sincronizacao(unittest.TestCase):
         with patch.object(S, 'TOKEN', 'valor-ficticio'), \
              patch.object(S.urllib.request, 'urlopen', side_effect=[erro, Resposta()]) as abrir, \
              patch.object(S.time, 'sleep') as dormir:
-            self.assertEqual(S._http('GET', '/rota-publica'), {'ok': True})
+            self.assertEqual(_HTTP_ORIGINAL('GET', '/rota-publica'), {'ok': True})
             self.assertEqual(abrir.call_count, 2)
             dormir.assert_called_once_with(0.5)
 
@@ -55,7 +56,7 @@ class Sincronizacao(unittest.TestCase):
              patch.object(S.urllib.request, 'urlopen', side_effect=erro) as abrir, \
              patch.object(S.time, 'sleep') as dormir:
             with self.assertRaises(urllib.error.HTTPError):
-                S._http('GET', '/rota-publica')
+                _HTTP_ORIGINAL('GET', '/rota-publica')
             self.assertEqual(abrir.call_count, 1)
             dormir.assert_not_called()
         self.assertEqual(S._motivo_seguro(erro), 'http_401')
@@ -66,7 +67,7 @@ class Sincronizacao(unittest.TestCase):
              patch.object(S.urllib.request, 'urlopen', side_effect=erro) as abrir, \
              patch.object(S.time, 'sleep') as dormir:
             with self.assertRaises(urllib.error.URLError):
-                S._http('PUT', '/rota-publica', {'conteudo': 'ficticio'})
+                _HTTP_ORIGINAL('PUT', '/rota-publica', {'conteudo': 'ficticio'})
             self.assertEqual(abrir.call_count, 1)
             dormir.assert_not_called()
         self.assertEqual(S._motivo_seguro(erro), 'rede_indisponivel')
