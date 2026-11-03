@@ -11,6 +11,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 import urllib.request
 import urllib.error
 
@@ -26,6 +27,17 @@ def log(*partes):
     print("[memoria]", *partes, flush=True)
 
 
+def _motivo_seguro(erro):
+    """Somente o tipo/código HTTP; nunca imprimir URL, corpo, header ou token."""
+    if isinstance(erro, urllib.error.HTTPError):
+        return "http_" + str(erro.code)
+    if isinstance(erro, urllib.error.URLError):
+        return "rede_indisponivel"
+    if isinstance(erro, TimeoutError):
+        return "tempo_limite"
+    return type(erro).__name__
+
+
 def _http(metodo, caminho, corpo=None):
     if not TOKEN:
         raise RuntimeError("PAT_MEMORIA ausente")
@@ -36,9 +48,21 @@ def _http(metodo, caminho, corpo=None):
     req.add_header("User-Agent", "motor-rebocl")
     if dados is not None:
         req.add_header("Content-Type", "application/json")
-    with urllib.request.urlopen(req, timeout=60) as r:
-        texto = r.read().decode("utf-8")
-    return json.loads(texto) if texto else None
+    # Só leituras idempotentes podem ser repetidas. Nunca repetir PUT após
+    # falha de transporte: a escrita pode ter sido aceita remotamente.
+    tentativas = 3 if metodo == "GET" else 1
+    for indice in range(tentativas):
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resposta:
+                texto = resposta.read().decode("utf-8")
+            return json.loads(texto) if texto else None
+        except urllib.error.HTTPError as erro:
+            if indice + 1 == tentativas or erro.code not in (429, 500, 502, 503, 504):
+                raise
+        except (urllib.error.URLError, TimeoutError):
+            if indice + 1 == tentativas:
+                raise
+        time.sleep(min(2, 0.5 * (2 ** indice)))
 
 
 def _sha(conteudo):
@@ -89,7 +113,7 @@ def listar_remoto():
         return {t["path"]: t["sha"] for t in arvore["tree"]
                 if t.get("type") == "blob" and t["path"].startswith(PASTA + "/")}
     except Exception as e:
-        log("não consegui listar:", type(e).__name__)
+        log("não consegui listar:", _motivo_seguro(e))
         return None
 
 
@@ -117,14 +141,14 @@ def baixar():
             base[caminho] = sha
         except Exception as e:
             erros += 1
-            log("falha ao baixar arquivo:", type(e).__name__)
+            log("falha ao baixar arquivo:", _motivo_seguro(e))
     # Sem base completa, um passo always() não deve enviar arquivos órfãos/antigos.
     if not erros:
         try:
             _salvar_base(base)
         except Exception as e:
             erros += 1
-            log("falha no manifesto:", type(e).__name__)
+            log("falha no manifesto:", _motivo_seguro(e))
     log(f"baixados {len(base)}; falhas {erros} (conteúdo não impresso)")
     return int(bool(erros))
 
@@ -174,7 +198,7 @@ def subir():
     try:
         base = _ler_base()
     except Exception as e:
-        log("base não confirmada; nenhum envio:", type(e).__name__)
+        log("base não confirmada; nenhum envio:", _motivo_seguro(e))
         return 1
     remoto = listar_remoto()
     if remoto is None:
@@ -228,7 +252,7 @@ def subir():
         _salvar_base(base)
     except Exception as e:
         erros += 1
-        log("falha no manifesto:", type(e).__name__)
+        log("falha no manifesto:", _motivo_seguro(e))
     log(f"subidos {enviados}; sem edição necessária {iguais}; falhas/conflitos {erros}")
     return int(bool(erros))
 
