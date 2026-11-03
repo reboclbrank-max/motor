@@ -30,6 +30,10 @@ def operacao(numero, corpo, marca, pendente=False, editar=None):
         raise ValueError("comentário sem assinatura verificável da casa")
     if editar is not None and (type(editar) is not int or editar <= 0):
         raise ValueError("comentário de edição inválido")
+    # Preserva a transformação legada de C.comentar, mas antes de fixar o payload.
+    corpo_base = corpo.rstrip()
+    if C.MARCA_DO_ROBO not in corpo_base and "<!--resp:" not in corpo_base:
+        corpo_base += "\n\n" + C.MARCA_DO_ROBO + "casa-->"
     tipo = EDITAR if editar is not None else CRIAR
     destino = {"repo": C.REPO, "conversa": numero}
     if editar is not None:
@@ -37,9 +41,9 @@ def operacao(numero, corpo, marca, pendente=False, editar=None):
     origem = {"marca": marca, "classe": "pendente" if pendente else "final"}
     ident = O.identidade(tipo, destino, origem)
     marca_outbox = marcador(ident)
-    if marca_outbox in corpo:
+    if marca_outbox in corpo_base:
         raise ValueError("payload já contém marcador da outbox")
-    corpo_final = corpo.rstrip() + "\n\n" + marca_outbox
+    corpo_final = corpo_base + "\n\n" + marca_outbox
     if len(corpo_final) > 65000:
         raise ValueError("comentário excede o limite seguro")
     return {"id": ident, "tipo": tipo, "destino": destino, "origem": origem,
