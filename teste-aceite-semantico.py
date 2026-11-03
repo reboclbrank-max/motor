@@ -71,7 +71,7 @@ class Aceite(unittest.TestCase):
  def test_reparo_mapa_flat_e_delta_sem_relaxar_plano_inicial(self):
   delta={'main.py':'def contar(xs):return {"total":len(xs)}\n'}
   for raw in [delta,{'arquivos':delta}]:
-   v,notas=A.decodificar_resposta(json.dumps(raw),parcial=True);full=A.normalizar_reparo(v,FS);self.assertEqual(full['test_main.py'],FS['test_main.py']);self.assertEqual(full['main.py'],delta['main.py'])
+   v,notas=A.decodificar_resposta(json.dumps(raw),parcial=True);full=A.normalizar_reparo(v,dict(FS,**{"main.py":"def contar(xs):return {}\n"}));self.assertEqual(full['test_main.py'],FS['test_main.py']);self.assertEqual(full['main.py'],delta['main.py'])
   with self.assertRaises(ValueError):A.decodificar_resposta(json.dumps({'arquivos':delta}))
  def test_reparo_delta_nao_esconde_tampering_de_teste_ou_path(self):
   with self.assertRaises(A.Revisao):A.normalizar_reparo({'arquivos':{'test_main.py':'# fraude'}},FS)
@@ -151,7 +151,7 @@ class Fluxo(unittest.TestCase):
    if m=='PATCH' and '/git/refs/' in path:self.assertFalse(d['force']);return {}
    return old_api(m,path,d)
   with T.contexto_mensagem(123,'a123',self.goal),patch.object(C,'gh',side_effect=api),patch.object(C,'chamar_llm',return_value=(json.dumps({'arquivos':F.FILES}),'reparo-fixture',None)) as llm,patch.object(A,'conferir_pr',return_value={}):
-   state=self.state();state.update(chamadas_modelo=2,head='a'*40,branch='autonomia/'+state['id'],prefixo_projeto='PROJETOS/'+state['id']+'/',arquivos_sha={},aceite=copy.deepcopy(CON_SOMA),aceite_sha256=S.digest(CON_SOMA));A.reparar(state,{'detalhes':'caso1: esperado5 observado0'})
+   state=self.state();state['plano']['arquivos']=dict(F.FILES,**{'main.py':'def somar(a,b):return 0\n'});state.update(chamadas_modelo=2,head='a'*40,branch='autonomia/'+state['id'],prefixo_projeto='PROJETOS/'+state['id']+'/',arquivos_sha={},aceite=copy.deepcopy(CON_SOMA),aceite_sha256=S.digest(CON_SOMA));A.reparar(state,{'detalhes':'caso1: esperado5 observado0'})
    self.assertEqual(state['chamadas_modelo'],3);self.assertEqual(state['reparos'],1);self.assertEqual(state['aceite'],CON_SOMA);self.assertEqual(state['plano']['arquivos']['test_main.py'],F.FILES['test_main.py']);self.assertIn('caso1',llm.call_args.args[0][0]['content']);self.assertIn('Contrato de aceite congelado',llm.call_args.args[0][0]['content'])
  def test_reparo_em_cache_nao_gasta_quarta_chamada(self):
   old_api=C.gh
@@ -163,5 +163,6 @@ class Fluxo(unittest.TestCase):
    if m=='PATCH' and '/git/refs/' in path:self.assertFalse(d['force']);return {}
    return old_api(m,path,d)
   with T.contexto_mensagem(123,'a123',self.goal),patch.object(C,'gh',side_effect=api),patch.object(C,'chamar_llm',side_effect=AssertionError('quarta inferencia proibida')),patch.object(A,'conferir_pr',return_value={}):
-   state=self.state();v={'arquivos':{'main.py':F.FILES['main.py']}};state.update(chamadas_modelo=3,head='a'*40,branch='autonomia/'+state['id'],prefixo_projeto='PROJETOS/'+state['id']+'/',arquivos_sha={},aceite=copy.deepcopy(CON_SOMA),aceite_sha256=S.digest(CON_SOMA),reparo_proposta=v,reparo_proposta_sha256=S.digest(v),reparo_base_head='a'*40);A.reparar(state,{'detalhes':'falha observada'});self.assertEqual(state['chamadas_modelo'],3);self.assertEqual(state['reparos'],1);self.assertEqual(state['plano']['arquivos']['test_main.py'],F.FILES['test_main.py']);self.assertNotIn('reparo_proposta',state)
+   state=self.state();state['plano']['arquivos']=dict(F.FILES,**{'main.py':'def somar(a,b):return 0\n'});v={'arquivos':{'main.py':F.FILES['main.py']}};state.update(chamadas_modelo=3,head='a'*40,branch='autonomia/'+state['id'],prefixo_projeto='PROJETOS/'+state['id']+'/',arquivos_sha={},aceite=copy.deepcopy(CON_SOMA),aceite_sha256=S.digest(CON_SOMA),reparo_proposta=v,reparo_proposta_sha256=S.digest(v),reparo_base_head='a'*40);A.reparar(state,{'detalhes':'falha observada'});self.assertEqual(state['chamadas_modelo'],3);self.assertEqual(state['reparos'],1);self.assertEqual(state['plano']['arquivos']['test_main.py'],F.FILES['test_main.py']);self.assertNotIn('reparo_proposta',state)
 if __name__=='__main__':unittest.main()
+

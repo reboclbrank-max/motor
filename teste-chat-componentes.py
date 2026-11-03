@@ -111,4 +111,16 @@ class Componentes(unittest.TestCase):
   with patch.object(F,'politica',return_value=p):
    with F.modelo_local({'plano':{'arquivos':{'formatador.py':F.BASELINE}}},{}):self.assertEqual(A._LIMITE_REPAROS.get(),7)
   self.assertEqual(A._LIMITE_REPAROS.get(),2)
+ def test_fonte_e_diagnostico_inteiros_e_configuracao_restaurada(self):
+  import motor_local
+  anterior=(motor_local.MODELO,motor_local.ARQUIVO)
+  fonte='#'+('x'*1600)+'MARCA_FIM\ndef formatar(dados):return ""'
+  with patch.object(motor_local,'baixar',return_value='/fixture'),patch.object(motor_local,'responder',return_value=('def formatar(dados):return ""',None)) as local:
+   with F.modelo_local({'plano':{'arquivos':{'formatador.py':fonte}}},{'detalhes':'MARCA_INICIO'+('x'*1400)}):C.chamar_llm([])
+   self.assertIn('MARCA_FIM',local.call_args.args[0]);self.assertIn('MARCA_INICIO',local.call_args.args[0])
+  self.assertEqual((motor_local.MODELO,motor_local.ARQUIVO),anterior)
+ def test_reparo_identico_bloqueia_sem_mudar_testes(self):
+  fs={'formatador.py':F.BASELINE,'test_api.py':F.TESTE}
+  with self.assertRaisesRegex(A.Revisao,'sem mudança'):A.normalizar_reparo({'arquivos':{'formatador.py':F.BASELINE}},fs)
 if __name__=='__main__':unittest.main()
+

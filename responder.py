@@ -329,6 +329,8 @@ def status():
                      f"(por {banco.get('atualizado_por','?')}) — use `dados:` para ver tudo")
     else:
         corpo.append("**🗄 Banco de dados:** ainda vazio (atualiza sozinho de hora em hora; ou use `dados:`)")
+    import diagnostico_autonomia
+    corpo.append(diagnostico_autonomia.texto())
     return "\n".join(corpo)
 
 
@@ -1429,3 +1431,4 @@ def _principal_com_origem(dados):
 
 if __name__ == "__main__":
     sys.exit(principal())
+
