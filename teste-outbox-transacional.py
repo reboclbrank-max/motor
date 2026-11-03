@@ -140,6 +140,7 @@ checar("recibo confirmado ausente não reenvia", espera(O.EfeitoIncerto, lambda:
 
 # Corrida na criação: PUT gravou, mas a resposta 409 chegou; adotar registro idêntico.
 s = Cenario("8")
+original = s.repo.gh
 def create_409(metodo, caminho, corpo=None):
     if metodo == "PUT" and not s.repo.dados:
         path = caminho.split("/contents/", 1)[1]
