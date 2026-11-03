@@ -72,6 +72,93 @@ class Sincronizacao(unittest.TestCase):
             dormir.assert_not_called()
         self.assertEqual(S._motivo_seguro(erro), 'rede_indisponivel')
 
+    def test_rebaixar_nao_apaga_edicao_local_pendente(self):
+        self.baixar();Path(self.arq).write_bytes(b'edicao privada pendente')
+        out=io.StringIO()
+        with contextlib.redirect_stdout(out):self.assertEqual(S.baixar(),1)
+        self.assertEqual(Path(self.arq).read_bytes(),b'edicao privada pendente')
+        self.assertFalse(Path(S.MANIFESTO).exists());self.assertEqual(S.subir(),1)
+        self.assertEqual(self.store[self.arq],b'original');self.assertFalse(self.puts)
+        self.assertNotIn(self.arq,out.getvalue());self.assertNotIn('edicao privada',out.getvalue())
+        self.assertIn('memoria_local_divergente_requer_revisao',out.getvalue())
+
+    def test_rebaixar_nao_ressuscita_arquivo_removido_no_remoto(self):
+        self.baixar();del self.store[self.arq]
+        self.assertEqual(S.baixar(),1);self.assertEqual(S.subir(),1)
+        self.assertEqual(Path(self.arq).read_bytes(),b'original')
+        self.assertNotIn(self.arq,self.store);self.assertFalse(self.puts)
+
+    def test_conferencia_de_toda_pasta_antes_da_primeira_escrita(self):
+        Path('MEMORIA').mkdir();Path('MEMORIA/zz-local.txt').write_bytes(b'novo nao enviado')
+        self.assertEqual(S.baixar(),1)
+        self.assertFalse(Path(self.arq).exists());self.assertFalse(Path(S.MANIFESTO).exists())
+        self.assertEqual(Path('MEMORIA/zz-local.txt').read_bytes(),b'novo nao enviado')
+
+    def test_copia_antiga_divergente_exige_revisao_sem_sobrescrita(self):
+        self.baixar();self.store[self.arq]=b'versao remota nova'
+        self.assertEqual(S.baixar(),1);self.assertEqual(Path(self.arq).read_bytes(),b'original')
+        self.assertEqual(self.store[self.arq],b'versao remota nova');self.assertFalse(self.puts)
+
+    def test_download_parcial_identico_retoma_sem_put(self):
+        outro='MEMORIA/zz.json';self.store[outro]=b'segundo'
+        def falhar(m,p,c=None):
+            if p.endswith('/'+S._sha(b'segundo')):raise TimeoutError('detalhe privado')
+            return self.api(m,p,c)
+        with patch.object(S,'_http',side_effect=falhar):self.assertEqual(S.baixar(),1)
+        self.assertEqual(Path(self.arq).read_bytes(),b'original');self.assertFalse(Path(outro).exists())
+        self.baixar();self.assertEqual(Path(outro).read_bytes(),b'segundo')
+        self.assertEqual(S.subir(),0);self.assertFalse(self.puts)
+
+    def test_destino_simbolico_nao_e_lido_nem_sobrescrito(self):
+        Path('fora').mkdir();Path('fora/estado.json').write_bytes(b'original')
+        Path('MEMORIA').symlink_to('fora',target_is_directory=True)
+        self.assertEqual(S.baixar(),1);self.assertEqual(Path('fora/estado.json').read_bytes(),b'original')
+        self.assertFalse(Path(S.MANIFESTO).exists())
+
+    def test_link_dentro_da_pasta_bloqueia_antes_de_escrever(self):
+        Path('MEMORIA').mkdir();Path('fora.txt').write_bytes(b'privado')
+        Path('MEMORIA/link.txt').symlink_to('../fora.txt')
+        self.assertEqual(S.baixar(),1);self.assertFalse(Path(self.arq).exists())
+        self.assertEqual(Path('fora.txt').read_bytes(),b'privado')
+
+    def test_recuperacao_em_pasta_nova_preserva_bytes_e_nao_reenvia(self):
+        self.baixar();Path(self.arq).write_bytes(b'checkpoint confirmado')
+        self.assertEqual(S.subir(),0);puts_antes=len(self.puts)
+        anterior=os.getcwd()
+        with tempfile.TemporaryDirectory() as nova:
+            try:
+                os.chdir(nova);self.baixar()
+                self.assertEqual(Path(self.arq).read_bytes(),b'checkpoint confirmado')
+                self.assertEqual(S.subir(),0);self.assertEqual(len(self.puts),puts_antes)
+            finally:os.chdir(anterior)
+
+    def sementes(self):
+        # A barreira offline exclui MEMORIA real por privacidade. Simular somente
+        # os dois nomes públicos com bytes fictícios e SHA exato desses bytes.
+        dados={caminho:('fixture publica '+str(i)).encode() for i,caminho in enumerate(S.SEMENTES_PUBLICAS)}
+        p=patch.object(S,'SEMENTES_PUBLICAS',{c:S._sha(v) for c,v in dados.items()})
+        p.start();self.addCleanup(p.stop)
+        for caminho, conteudo in dados.items():
+            Path(caminho).parent.mkdir(exist_ok=True);Path(caminho).write_bytes(conteudo)
+
+    def test_checkout_com_sementes_nao_bloqueia_nem_envia_copias_ausentes(self):
+        self.sementes();self.baixar();self.assertEqual(S.subir(),0)
+        self.assertEqual(set(self.store),{self.arq});self.assertFalse(self.puts)
+        for caminho,sha in S.SEMENTES_PUBLICAS.items():self.assertEqual(S._ler_base()[caminho],sha)
+
+    def test_sementes_exatas_podem_receber_versao_privada(self):
+        self.sementes()
+        for caminho in S.SEMENTES_PUBLICAS:self.store[caminho]=b'estado privado atual'
+        self.baixar()
+        for caminho in S.SEMENTES_PUBLICAS:self.assertEqual(Path(caminho).read_bytes(),b'estado privado atual')
+        self.assertEqual(S.subir(),0);self.assertFalse(self.puts)
+
+    def test_semente_editada_nao_recebe_excecao(self):
+        self.sementes();caminho=next(iter(S.SEMENTES_PUBLICAS))
+        Path(caminho).write_bytes(b'edicao local pendente')
+        self.assertEqual(S.baixar(),1);self.assertFalse(Path(self.arq).exists())
+        self.assertEqual(Path(caminho).read_bytes(),b'edicao local pendente')
+
     def test_download_confere_blob_e_base_fora_memoria(self):
         self.baixar();self.assertEqual(S._ler_base()[self.arq],S._sha(b'original'))
         self.assertFalse(Path('MEMORIA/.memoria-sync.json').exists())
@@ -160,3 +247,4 @@ class Sincronizacao(unittest.TestCase):
         self.baixar();Path(S.MANIFESTO).write_text('{');self.assertEqual(S.subir(),1);self.assertFalse(self.puts)
 
 if __name__=='__main__':unittest.main()
+

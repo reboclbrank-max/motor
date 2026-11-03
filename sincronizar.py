@@ -9,6 +9,7 @@ import base64
 import hashlib
 import json
 import os
+import stat
 import sys
 import tempfile
 import time
@@ -21,6 +22,12 @@ TOKEN = os.environ.get("PAT_MEMORIA", "").strip()
 PASTA = os.environ.get("PASTA_MEMORIA", "MEMORIA").strip() or "MEMORIA"
 RAMO = os.environ.get("RAMO_MEMORIA", "main").strip() or "main"
 MANIFESTO = ".memoria-sync.json"
+# Cópias públicas distribuídas com o código, não memória produzida pelo runner.
+# A exceção exige nome E conteúdo exatos; nova versão requer revisão desta lista.
+SEMENTES_PUBLICAS = {
+    "MEMORIA/exatidao-motores.json": "711735dd088028aa4b41e7b64a4e59996e906d05",
+    "MEMORIA/prova-fogo.json": "9bf37eee0357813c9f3a7e678279ce65830a99d4",
+}
 
 
 def log(*partes):
@@ -117,6 +124,33 @@ def listar_remoto():
         return None
 
 
+def _conferir_destino_download(remoto):
+    """Reuso só com cópias idênticas; nunca decide descartar edição ou órfão."""
+    sementes_ausentes = {}
+    if not os.path.lexists(PASTA):
+        return sementes_ausentes
+    if os.path.islink(PASTA) or not os.path.isdir(PASTA):
+        raise FalhaSync("destino_local_inseguro")
+    def falhou(erro):
+        raise erro
+    for raiz, pastas, arquivos in os.walk(PASTA, followlinks=False, onerror=falhou):
+        for nome in pastas + arquivos:
+            caminho = os.path.join(raiz, nome).replace(os.sep, "/")
+            modo = os.lstat(caminho).st_mode
+            if stat.S_ISLNK(modo) or not (stat.S_ISDIR(modo) or stat.S_ISREG(modo)):
+                raise FalhaSync("destino_local_inseguro")
+            if stat.S_ISREG(modo):
+                local = _sha(_ler_local(caminho))
+                if PASTA == "MEMORIA" and SEMENTES_PUBLICAS.get(caminho) == local:
+                    # Se não existe no privado, lembrar a versão local impede que
+                    # subir confunda esta cópia pública com nova memória criada.
+                    if caminho not in remoto:
+                        sementes_ausentes[caminho] = local
+                elif local != remoto.get(caminho):
+                    raise FalhaSync("memoria_local_divergente_requer_revisao")
+    return sementes_ausentes
+
+
 def baixar():
     # Invalida a base anterior antes de uma nova tentativa, inclusive se a rede cair.
     try:
@@ -128,7 +162,15 @@ def baixar():
     remoto = listar_remoto()
     if remoto is None:
         return 1
-    base, erros = {}, 0
+    try:
+        # Pré-verificação integral antes de alterar qualquer arquivo da memória.
+        # Cópia parcial idêntica pode retomar; divergência exige revisão/cópia limpa.
+        sementes_ausentes = _conferir_destino_download(remoto)
+    except Exception as e:
+        codigo = e.codigo if isinstance(e, FalhaSync) else _motivo_seguro(e)
+        log("download bloqueado; arquivos locais preservados:", codigo)
+        return 1
+    base, erros = dict(sementes_ausentes), 0
     for caminho, sha in sorted(remoto.items()):
         try:
             if not _caminho_seguro(caminho):
@@ -149,7 +191,7 @@ def baixar():
         except Exception as e:
             erros += 1
             log("falha no manifesto:", _motivo_seguro(e))
-    log(f"baixados {len(base)}; falhas {erros} (conteúdo não impresso)")
+    log(f"baixados {len(base) - len(sementes_ausentes)}; falhas {erros} (conteúdo não impresso)")
     return int(bool(erros))
 
 
@@ -269,3 +311,4 @@ def main(argv):
 
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv))
+
