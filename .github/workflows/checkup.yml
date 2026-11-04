@@ -74,10 +74,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_MEMORIA }}
         run: |
+          SAIDA=$(python3 entrega_agendador.py --horas 48) || SAIDA="medicao falhou (o checkup segue)"
+          echo "$SAIDA"
           {
             echo "### Entrega do agendador (48 h)"
             echo
             echo '```'
-            python3 entrega_agendador.py --horas 48
+            echo "$SAIDA"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
