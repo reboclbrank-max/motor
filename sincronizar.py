@@ -310,7 +310,7 @@ def _subir_sem_trava():
         pastas[:] = [d for d in pastas if not os.path.islink(os.path.join(raiz, d))]
         for nome in sorted(arquivos):
             caminho = os.path.join(raiz, nome).replace(os.sep, "/")
-            conteudo=anterior=existente=None
+            conteudo=local=anterior=existente=None
             try:
                 if not _caminho_seguro(caminho) or os.path.islink(caminho):
                     raise FalhaSync("caminho_inseguro")
