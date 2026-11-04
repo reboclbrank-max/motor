@@ -104,4 +104,28 @@ class Agenda(unittest.TestCase):
  def test_encerrada_a_pendencia_a_agenda_volta_a_escolher_prioridade(self):
   self.pendente(evento=True);M.executar()
   self.runs=[self.runmeta(conclusion='failure')];self.assertEqual(M.executar()['acao'],'retomar')
+ def test_pendente_e_conferido_no_worker_que_o_despachou_nao_no_pin_novo(self):
+  # Medido em 04/11: cada merge em main move o pin, e a execucao despachada antes disso nunca
+  # mais casava com permitido() - o resultado virava "incerto" no diario do dono sem ser.
+  antigo='f'*40
+  self.store={'versao':1,'acoes':{},'eventos':{},'diario':116,'dia':'2026-11-04','usados':1,'ultima_verificacao':self.now,
+              'pendente':{'chave':'verificar-2026-11-04-abcd','tipo':'verificar','em':self.now-60,'run':None,'attempt':1,'worker_sha':antigo}}
+  self.sha='s0'
+  self.runs=[self.runmeta(id=1234,head_sha=antigo,created_at=datetime.datetime.fromtimestamp(self.now-30,datetime.timezone.utc).isoformat())]
+  r=M.executar()
+  self.assertEqual(r.get('observado'),1234);self.assertIsNone(self.store['pendente'])
+  self.assertEqual(self.store['eventos'].get('resultado-verificar-2026-11-04-abcd'),'enviado')
+ def test_pendente_nao_casa_execucao_de_outro_sha(self):
+  antigo='f'*40
+  self.store={'versao':1,'acoes':{},'eventos':{},'diario':116,'dia':'2026-11-04','usados':1,'ultima_verificacao':self.now,
+              'pendente':{'chave':'verificar-2026-11-04-abcd','tipo':'verificar','em':self.now-60,'run':None,'attempt':1,'worker_sha':antigo}}
+  self.sha='s0'
+  self.runs=[self.runmeta(id=1234,head_sha='e'*40,created_at=datetime.datetime.fromtimestamp(self.now-30,datetime.timezone.utc).isoformat())]
+  self.assertTrue(M.executar().get('aguardando'));self.assertIsNotNone(self.store['pendente'])
+ def test_pendente_legado_sem_worker_cai_no_pin_atual(self):
+  self.store={'versao':1,'acoes':{},'eventos':{},'diario':116,'dia':'2026-11-04','usados':1,'ultima_verificacao':self.now,
+              'pendente':{'chave':'verificar-2026-11-04-abcd','tipo':'verificar','em':self.now-60,'run':None,'attempt':1}}
+  self.sha='s0'
+  self.runs=[self.runmeta(id=1234,head_sha='f'*40,created_at=datetime.datetime.fromtimestamp(self.now-30,datetime.timezone.utc).isoformat())]
+  self.assertTrue(M.executar().get('aguardando'));self.assertIsNotNone(self.store['pendente'])
 if __name__=='__main__':unittest.main()
