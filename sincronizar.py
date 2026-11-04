@@ -185,6 +185,7 @@ def _baixar_sem_trava():
         return 1
     base, erros = dict(sementes_ausentes), 0
     for caminho, sha in sorted(remoto.items()):
+        local = None
         try:
             if not _caminho_seguro(caminho):
                 raise ValueError("caminho fora da memória")
@@ -236,6 +237,24 @@ class FalhaSync(ValueError):
     def __init__(self,codigo):self.codigo=codigo;super().__init__(codigo)
 
 def _id_caminho(caminho):return hashlib.sha256(caminho.encode()).hexdigest()[:16]
+
+
+def _corrida_ja_resolvida(caminho, local):
+    """O PUT foi recusado com 409, mas o conteúdo remoto JÁ é o nosso? Então o objetivo está cumprido.
+
+    Medido em 04/11/2026 (run 41874695326): `testar-motores.py` gravou MEMORIA/saude-motores.json
+    às 17:13:11 e o passo seguinte, `subir`, recebeu 409 às 17:13:12 — porque a fotografia do
+    remoto era de um segundo antes. A casa brigou consigo mesma, o arquivo certo estava lá, e o
+    job ficou vermelho. Aqui a pergunta é só uma: o que está no remoto agora é exatamente o meu?
+    """
+    if not local:
+        return False
+    try:
+        atual = _http("GET", f"/repos/{REPO_MEMORIA}/contents/{caminho}")
+        bruto = (atual or {}).get("content") or ""
+        return bool(bruto) and _sha(base64.b64decode(bruto)) == local
+    except Exception:
+        return False
 
 def preservar_conflito(caminho,conteudo,anterior,remoto):
     """Cópia privada imutável e verificável; nunca altera o arquivo em conflito."""
@@ -323,14 +342,22 @@ def _subir_sem_trava():
                 enviados += 1
             except Exception as e:
                 erros += 1
+                resolvida = False
                 if isinstance(e,urllib.error.HTTPError) and e.code==409 and conteudo is not None:
-                    try:
-                        preservar_conflito(caminho,conteudo,anterior,existente)
-                        e=FalhaSync('corrida_http409_copia_privada_confirmada')
-                    except Exception as backup_erro:
-                        _relatar_falha(caminho,backup_erro)
-                        e=FalhaSync('corrida_http409_sem_copia_confirmada')
-                _relatar_falha(caminho,e)
+                    resolvida = _corrida_ja_resolvida(caminho, local)
+                    if resolvida:
+                        # Nada foi sobrescrito e nada foi perdido: o remoto já é o nosso conteúdo.
+                        erros -= 1;iguais += 1;base[caminho] = local
+                        log('corrida de escrita já resolvida: remoto é o nosso conteúdo ->', 'id='+_id_caminho(caminho))
+                    else:
+                        try:
+                            preservar_conflito(caminho,conteudo,anterior,existente)
+                            e=FalhaSync('corrida_http409_copia_privada_confirmada')
+                        except Exception as backup_erro:
+                            _relatar_falha(caminho,backup_erro)
+                            e=FalhaSync('corrida_http409_sem_copia_confirmada')
+                if not resolvida:
+                    _relatar_falha(caminho,e)
     try:
         _salvar_base(base)
     except Exception as e:

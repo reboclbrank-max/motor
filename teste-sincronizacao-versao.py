@@ -73,6 +73,49 @@ class Sincronizacao(unittest.TestCase):
             dormir.assert_not_called()
         self.assertEqual(S._motivo_seguro(erro), 'rede_indisponivel')
 
+    def _409_no_put(self, remoto_depois):
+        """Depois do download, o PUT passa a ser recusado com 409 e o remoto já está em `remoto_depois`."""
+        original = self.api
+        def api(metodo, caminho, corpo=None):
+            if metodo == 'PUT' and caminho.split('/contents/')[1].split('?')[0] == self.arq:
+                self.store[self.arq] = remoto_depois
+                raise urllib.error.HTTPError('url-privada', 409, 'corrida', None, None)
+            return original(metodo, caminho, corpo)
+        return api
+
+    def test_corrida_em_que_o_remoto_ja_e_o_nosso_conteudo_nao_e_falha(self):
+        # Run 41874695326, 04/11: o proprio job gravou o arquivo 1 segundo antes e o `subir` deu 409.
+        self.baixar()
+        Path(self.arq).write_bytes(b'medicao-nova')
+        with patch.object(S, '_http', side_effect=self._409_no_put(b'medicao-nova')):
+            self.assertEqual(S.subir(), 0)
+        self.assertFalse(Path('MEMORIA/conflitos-sync').exists())
+
+    def test_corrida_com_conteudo_de_outro_continua_falhando_e_preserva_copia(self):
+        self.baixar()
+        Path(self.arq).write_bytes(b'medicao-nova')
+        with patch.object(S, '_http', side_effect=self._409_no_put(b'medicao-de-outro')):
+            self.assertEqual(S.subir(), 1)
+        copias = [k for k in self.store if '/conflitos-sync/' in k]
+        self.assertEqual(len(copias), 1)
+        registro = json.loads(self.store[copias[0]])
+        self.assertEqual(registro['estado'], 'revisao_necessaria')
+        self.assertEqual(registro['sha_local'], S._sha(b'medicao-nova'))
+
+    def test_corrida_sem_confirmacao_do_remoto_nao_vira_sucesso(self):
+        self.baixar()
+        Path(self.arq).write_bytes(b'medicao-nova')
+        original = self.api
+        def api(metodo, caminho, corpo=None):
+            if metodo == 'PUT' and '/conflitos-sync/' not in caminho:
+                raise urllib.error.HTTPError('url-privada', 409, 'corrida', None, None)
+            if metodo == 'GET' and '/conteudo-do-arquivo-em-corrida' in caminho:
+                raise RuntimeError('leitura falhou')
+            if metodo == 'GET' and caminho.rstrip('/').endswith(self.arq):
+                raise RuntimeError('leitura falhou')
+            return original(metodo, caminho, corpo)
+        with patch.object(S, '_http', side_effect=api):
+            self.assertEqual(S.subir(), 1)
     def test_rebaixar_nao_apaga_edicao_local_pendente(self):
         self.baixar();Path(self.arq).write_bytes(b'edicao privada pendente')
         out=io.StringIO()
