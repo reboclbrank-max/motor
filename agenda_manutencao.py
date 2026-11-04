@@ -88,7 +88,11 @@ def executar():
  runs=C.gh('GET',f'/repos/{C.REPO_ROBO}/actions/runs?per_page=100')['workflow_runs']
  pend=s.get('pendente')
  if pend:
-  matches=[r for r in runs if permitido(r,p) and (r['id']==pend['run'] if pend.get('run') else r['path']==TESTES and epoch(r['created_at'])>=pend['em']-5)]
+  # A conferência do pendente usa o worker que ESTAVA no ar quando o efeito saiu. Um merge em
+  # main move o pin: sem isto, a execução que a própria agenda despachou nunca mais casaria
+  # (head_sha != pin novo) e o resultado viraria 'incerto' no diário do dono a cada merge.
+  p_pend=dict(p,worker_sha=pend.get('worker_sha') if re.fullmatch('[0-9a-f]{40}',str(pend.get('worker_sha') or '')) else p['worker_sha'])
+  matches=[r for r in runs if permitido(r,p_pend) and (r['id']==pend['run'] if pend.get('run') else r['path']==TESTES and epoch(r['created_at'])>=pend['em']-5)]
   if len(matches)>1 and not pend.get('run'):raise A.Revisao('Mais de uma execução na janela; não inventar correlação.')
   r=matches[0] if matches else None
   if r is None or int(r.get('run_attempt',1))<pend.get('attempt',1):
@@ -117,7 +121,7 @@ def executar():
  else:return {'sem_acao':True}
  if s.get('usados',0)>=2:return {'orcamento_esgotado':True}
  diario(s,p)
- s['acoes'][chave]={'tipo':kind,'em':now};s['usados']=s.get('usados',0)+1;s['pendente']={'chave':chave,'tipo':kind,'em':now,'run':run,'attempt':attempt}
+ s['acoes'][chave]={'tipo':kind,'em':now};s['usados']=s.get('usados',0)+1;s['pendente']={'chave':chave,'tipo':kind,'em':now,'run':run,'attempt':attempt,'worker_sha':p['worker_sha']}
  salvar(s,p);guardar(p)
  # Resposta incerta deixa pendente para reconciliação; nunca reenviar automaticamente.
  C.gh('POST',endpoint,body)
