@@ -72,6 +72,41 @@ class Resumo(unittest.TestCase):
         self.assertEqual((s["mediana_s"], s["media_s"], s["pior_s"]), (42, 42, 42))
 
 
+class DaCasa(unittest.TestCase):
+    """O login é o mesmo do dono: separar a casa da pessoa é por conteúdo, não por autor."""
+
+    def test_boletim_da_casa_nao_e_pergunta(self):
+        for corpo in ("🤖 **Assistente Rebocl**\n\nTudo em ordem",
+                      "🌅 **Turno autônomo 02/11**\n\n**Missão de hoje:** x",
+                      "🌙 **Sonho da noite**\n\ntexto",
+                      "algo <!--robo:abc-->",
+                      "resposta <!--resp:a1-->"):
+            self.assertTrue(T.da_casa(corpo), corpo)
+
+    def test_pergunta_de_gente_continua_pergunta(self):
+        for corpo in ("perfeito, continue, resolva", "e o vídeo?", ""):
+            self.assertFalse(T.da_casa(corpo), corpo)
+
+    def test_predicado_e_subconjunto_do_varrer(self):
+        """Se a varredura trata como casa, o instrumento também precisa tratar."""
+        import varrer
+        amostras = ["🤖 **Assistente Rebocl**\n\nTudo em ordem",
+                    "🌅 **Turno autônomo 02/11**\n\n**Missão de hoje:** x _(🤖 eu acordei sozinha hoje · )",
+                    "🌙 **Sonho da noite**\n\n_(🤖 eu acordei sozinha hoje · )",
+                    "corpo com <!--robo:xyz--> no meio",
+                    "corpo com <!--resp:abc-->",
+                    "@reboclbrank-max — aviso automático do assistente.\n\nqualquer\n\nPara receber também no Telegram (grátis), veja o passo a passo no COMECE-AQUI._",
+                    "perfeito, continue, resolva",
+                    "texto comum sem marca"]
+        for corpo in amostras:
+            if varrer._do_robo(corpo):
+                self.assertTrue(T.da_casa(corpo), corpo)
+
+    def test_mensagem_da_casa_nao_abre_espera(self):
+        pares = T.pareamentos([c("2026-11-04T10:00:00Z", DONO, "🤖 boletim"),
+                               c("2026-11-04T14:00:00Z", DONO, "🤖 outro boletim")])
+        self.assertEqual(pares, [])
+
 class Conversa(unittest.TestCase):
     def test_resposta_de_outra_conversa_nao_serve(self):
         a = c("2026-11-04T10:00:00Z", DONO, "pergunta"); a["_numero"] = 17
