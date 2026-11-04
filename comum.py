@@ -10,6 +10,7 @@ HuggingFace, Cerebras, Mistral e um motor personalizado).
 import base64
 import difflib
 import hashlib
+import http.client
 import html as _html
 import ipaddress
 import json
@@ -182,6 +183,16 @@ def log(*args):
 
 # ================================================================ GitHub
 
+# Credencial em texto nunca deve chegar a log, comentário ou memória. O mesmo filtro que o log
+# público usa (varrer.linha_de_bloqueio) passa a valer na origem: aqui.
+SEGREDO = re.compile(r'(?i)(gh[pousr]_[A-Za-z0-9]{15,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9]{15,}|-----BEGIN [^-]*PRIVATE KEY)')
+
+
+def sem_segredo(texto, limite=500):
+    """Troca credencial por [omitido] e corta; nunca devolve o texto cru."""
+    return SEGREDO.sub('[omitido]', str(texto))[:limite]
+
+
 def gh(metodo, caminho, corpo=None):
     url = caminho if caminho.startswith("http") else API + caminho
     dados = json.dumps(corpo).encode("utf-8") if corpo is not None else None
@@ -192,13 +203,25 @@ def gh(metodo, caminho, corpo=None):
     req.add_header("User-Agent", "assistente-rebocl")
     if dados is not None:
         req.add_header("Content-Type", "application/json")
-    try:
-        with urllib.request.urlopen(req, timeout=60) as r:
-            texto = r.read().decode("utf-8")
-            return json.loads(texto) if texto else None
-    except urllib.error.HTTPError as e:
-        detalhe = e.read().decode("utf-8", "replace")[:500]
-        raise RuntimeError(f"GitHub API {metodo} {caminho} → HTTP {e.code}: {detalhe}") from None
+    # GET é idempotente e pode repetir; escrita NÃO se repete (o efeito pode ter sido aceito).
+    tentativas = 3 if metodo == "GET" else 1
+    for indice in range(tentativas):
+        ultima = indice + 1 == tentativas
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                texto = r.read().decode("utf-8")
+                return json.loads(texto) if texto else None
+        except urllib.error.HTTPError as e:
+            detalhe = sem_segredo(e.read().decode("utf-8", "replace"))
+            # 403 do limite secundário e 5xx são transitórios; 401/404 não são e sobem na hora.
+            if ultima or e.code not in (403, 429, 500, 502, 503, 504):
+                raise RuntimeError(f"GitHub API {metodo} {caminho} → HTTP {e.code}: {detalhe}") from None
+        except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.HTTPException):
+            # Uma queda de conexão no meio da leitura (RemoteDisconnected/IncompleteRead) NÃO é
+            # URLError e antes matava o turno inteiro. Agora três tentativas curtas, e só então sobe.
+            if ultima:
+                raise
+        time.sleep(min(2.0, 0.4 * (2 ** indice)))
 
 
 MARCA_DO_ROBO = "<!--robo:"      # toda fala da automação carrega esta marca invisível

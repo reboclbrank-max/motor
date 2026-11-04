@@ -272,7 +272,7 @@ def processar(issue, comentario):
                 os.environ[nome] = valor
 
 
-SEGREDO = re.compile(r'(?i)(gh[pousr]_[A-Za-z0-9]{15,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9]{15,}|-----BEGIN [^-]*PRIVATE KEY)')
+SEGREDO = C.SEGREDO  # um só filtro de credencial no motor, definido em comum.py
 
 
 def eh_pausa_por_revisao(e):
