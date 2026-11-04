@@ -33,7 +33,7 @@ jobs:
           python-version: '3.12'
 
       - name: Barreira offline (sem rede, sem segredo)
-        run: python3 rodar-contratos-offline.py teste-casa.py teste-memoria-retentativa.py teste-entrega-agendador.py teste-diagnostico-pausa.py
+        run: python3 rodar-contratos-offline.py teste-casa.py teste-memoria-retentativa.py teste-entrega-agendador.py teste-diagnostico-pausa.py teste-tempo-resposta.py
 
       - name: Baixar a memória do repositório privado
         env:
