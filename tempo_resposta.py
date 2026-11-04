@@ -31,7 +31,29 @@ def _instante(texto):
 def eh_resposta(comentario):
     """Resposta da casa é a que carrega a marca invisível; 🤖 sozinho não basta."""
     corpo = comentario.get("body") or ""
-    return MARCA_RESPOSTA in corpo or corpo.startswith("🤖")
+    return MARCA_RESPOSTA in corpo or corpo.lstrip().startswith("🤖")
+
+
+def da_casa(corpo):
+    """A fala saiu com o login do dono, mas foi a casa que escreveu?
+
+    O PAT da automação é do próprio dono: `user.login` **não** separa os dois — foi assim que
+    a primeira versão deste instrumento contou 21 "perguntas do dono" em 7 dias, sendo que
+    várias eram boletins e turnos automáticos da casa, e a mediana de espera saiu errada.
+
+    Este predicado é um SUBCONJUNTO de `varrer._do_robo` (que é a autoridade da casa); o
+    contrato em `teste-tempo-resposta.py` garante que nada aqui fica mais frouxo que lá.
+    """
+    texto = (corpo or "").lstrip()
+    if MARCA_RESPOSTA in texto or "<!--robo:" in texto:
+        return True
+    if texto.startswith(("🤖", "🌅 **Turno autônomo", "🌙 **Sonho da noite")):
+        return True
+    # Formato do notificador anterior à marca do robô (histórico preservado, não apagado).
+    if texto.startswith(f"@{DONO} — aviso automático do assistente.\n\n") and texto.endswith(
+            "Para receber também no Telegram (grátis), veja o passo a passo no COMECE-AQUI._"):
+        return True
+    return False
 
 
 def pareamentos(comentarios):
@@ -49,7 +71,8 @@ def pareamentos(comentarios):
     for numero, lista in por_conversa.items():
         eventos = sorted(lista, key=lambda c: _instante(c["created_at"]))
         perguntas = [_instante(c["created_at"]) for c in eventos
-                     if (c.get("user") or {}).get("login") == DONO and not eh_resposta(c)]
+                     if (c.get("user") or {}).get("login") == DONO
+                     and not eh_resposta(c) and not da_casa(c.get("body"))]
         respostas = [_instante(c["created_at"]) for c in eventos if eh_resposta(c)]
         for quando in perguntas:
             seguinte = next((r for r in respostas if r > quando), None)
