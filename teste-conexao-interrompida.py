@@ -115,6 +115,25 @@ class Sincronizar(Base):
                 S._http('PUT', '/x', {'a': 1})
         self.assertEqual(m.call_count, 1)
 
+    def test_sem_segredo_cobre_as_familias_de_chave_da_casa(self):
+        # As revisões de 04/11: o filtro só cobria tokens do GitHub; a casa usa também
+        # Gemini (AIza), Groq (gsk_), Requesty (xai-), HF (hf_), Fernet (gAAAAA), JWT (eyJ…)
+        # e demais famílias de PREFIXOS_DE_CHAVE.
+        for chave in ('gsk_' + 'a' * 20, 'xai-' + 'b' * 20, 'hf_' + 'c' * 20,
+                      'nvapi-' + 'd' * 20, 'pplx-' + 'e' * 20, 'zai-' + 'f' * 20,
+                      'rnd_' + 'g' * 20, 'ac_' + 'h' * 20, 'sk_' + 'i' * 20,
+                      'sk-proj-' + 'j' * 25, 'solar-' + 'k' * 20,
+                      'AIza' + 'l' * 35, 'EAA' + 'm' * 25, 'IGAA' + 'n' * 25,
+                      'gAAAAA' + 'o' * 25,
+                      'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJVadQssw5c'):
+            saida = C.sem_segredo('erro: ' + chave + ' no corpo')
+            self.assertNotIn(chave, saida, 'não coberta: ' + chave[:10])
+            self.assertIn('[omitido]', saida)
+
+    def test_sem_segredo_nao_redig_palavra_comum(self):
+        texto = 'o sol solar aquece; a EAD avançou; rede local comum'
+        self.assertEqual(C.sem_segredo(texto), texto)
+
     def test_motivo_seguro_nao_imprime_conteudo(self):
         self.assertEqual(S._motivo_seguro(queda()), 'RemoteDisconnected')
         self.assertNotIn('Remote end closed', S._motivo_seguro(queda()))

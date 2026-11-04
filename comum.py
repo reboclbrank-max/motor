@@ -185,7 +185,19 @@ def log(*args):
 
 # Credencial em texto nunca deve chegar a log, comentário ou memória. O mesmo filtro que o log
 # público usa (varrer.linha_de_bloqueio) passa a valer na origem: aqui.
-SEGREDO = re.compile(r'(?i)(gh[pousr]_[A-Za-z0-9]{15,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9]{15,}|-----BEGIN [^-]*PRIVATE KEY)')
+# Cobre as famílias de PREFIXOS_DE_CHAVE (a casa usa Gemini/Groq/Requesty/Fernet/JWT/etc.),
+# não só tokens do GitHub. Prefixos muito genéricos ("solar", "ac_") só com sufixo token-like
+# para não redigir palavra comum; formas com caixa significativa (AIza, eyJ, EAA, gAAAAA) ficam
+# sensíveis a caixa via (?-i:...) mesmo com o (?i) global.
+SEGREDO = re.compile(
+    r'(?i)(gh[pousr]_[A-Za-z0-9]{15,}|github_pat_[A-Za-z0-9_]{20,}|'
+    r'sk-proj-[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9]{15,}|sk_[A-Za-z0-9]{15,}|'
+    r'gsk_[A-Za-z0-9]{15,}|xai-[A-Za-z0-9_-]{15,}|hf_[A-Za-z0-9]{15,}|'
+    r'nvapi-[A-Za-z0-9_-]{15,}|pplx-[A-Za-z0-9_-]{15,}|zai-[A-Za-z0-9_-]{15,}|'
+    r'rnd_[A-Za-z0-9]{15,}|ac_[A-Za-z0-9]{15,}|solar[-_][A-Za-z0-9_-]{15,}|'
+    r'(?-i:AIza[A-Za-z0-9_-]{30,}|eyJ[A-Za-z0-9_-]{10,}(?:\.[A-Za-z0-9_-]{10,}){1,2}|'
+    r'EAA[A-Za-z0-9_-]{20,}|IGAA[A-Za-z0-9_-]{20,}|gAAAAA[A-Za-z0-9_-]{20,})|'
+    r'-----BEGIN [^-]*PRIVATE KEY)')
 
 
 def sem_segredo(texto, limite=500):
