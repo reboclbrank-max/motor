@@ -68,7 +68,7 @@ jobs:
       # pedia 104 execuções em 48 h e recebeu 12; o `banco` pedia 48 e recebeu 7. Este passo
       # publica a taxa no resumo do job (sem escrever no repositório) para que a casa veja o
       # próprio relógio falhando em vez de descobrir por acidente.
-      - name: Quanto o agendador realmente entregou
+      - name: Quanto o agendador entregou e quanto o dono esperou
         if: always()
         continue-on-error: true
         env:
@@ -76,10 +76,18 @@ jobs:
         run: |
           SAIDA=$(python3 entrega_agendador.py --horas 48) || SAIDA="medicao falhou (o checkup segue)"
           echo "$SAIDA"
+          ESPERA=$(python3 tempo_resposta.py --horas 168) || ESPERA="espera nao observavel (o checkup segue)"
+          echo "$ESPERA"
           {
             echo "### Entrega do agendador (48 h)"
             echo
             echo '```'
             echo "$SAIDA"
+            echo '```'
+            echo
+            echo "### Espera do dono até a resposta (7 dias)"
+            echo
+            echo '```'
+            echo "$ESPERA"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
