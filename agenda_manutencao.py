@@ -91,6 +91,12 @@ def executar():
   # A conferência do pendente usa o worker que ESTAVA no ar quando o efeito saiu. Um merge em
   # main move o pin: sem isto, a execução que a própria agenda despachou nunca mais casaria
   # (head_sha != pin novo) e o resultado viraria 'incerto' no diário do dono a cada merge.
+  if not re.fullmatch('[0-9a-f]{40}',str(pend.get('worker_sha') or '')):
+   # Pendente gravado antes deste contrato: a chave 'verificar-AAAA-MM-DD-<pin12>' carrega
+   # o prefixo do worker. Se as execuções listadas concordam num só head, esse é o worker.
+   m=re.fullmatch(r'verificar-\d{4}-\d{2}-\d{2}-([0-9a-f]{12})',str(pend.get('chave') or ''))
+   iguais={r.get('head_sha') for r in runs if m and str(r.get('head_sha') or '').startswith(m.group(1))}
+   if len(iguais)==1:pend['worker_sha']=iguais.pop()
   p_pend=dict(p,worker_sha=pend.get('worker_sha') if re.fullmatch('[0-9a-f]{40}',str(pend.get('worker_sha') or '')) else p['worker_sha'])
   matches=[r for r in runs if permitido(r,p_pend) and (r['id']==pend['run'] if pend.get('run') else r['path']==TESTES and epoch(r['created_at'])>=pend['em']-5)]
   if len(matches)>1 and not pend.get('run'):raise A.Revisao('Mais de uma execução na janela; não inventar correlação.')
