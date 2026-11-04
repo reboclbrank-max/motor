@@ -63,3 +63,21 @@ jobs:
           PAT_MEMORIA: ${{ secrets.PAT_MEMORIA }}
           REPO_MEMORIA: ${{ secrets.REPO_MEMORIA }}
         run: python3 sincronizar.py subir
+
+      # 04/11/2026: o relógio do GitHub não entrega o que o cron pede. Medido: o canal de e-mail
+      # pedia 104 execuções em 48 h e recebeu 12; o `banco` pedia 48 e recebeu 7. Este passo
+      # publica a taxa no resumo do job (sem escrever no repositório) para que a casa veja o
+      # próprio relógio falhando em vez de descobrir por acidente.
+      - name: Quanto o agendador realmente entregou
+        if: always()
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_MEMORIA }}
+        run: |
+          {
+            echo "### Entrega do agendador (48 h)"
+            echo
+            echo '```'
+            python3 entrega_agendador.py --horas 48
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
