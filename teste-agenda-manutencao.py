@@ -128,4 +128,23 @@ class Agenda(unittest.TestCase):
   self.sha='s0'
   self.runs=[self.runmeta(id=1234,head_sha='f'*40,created_at=datetime.datetime.fromtimestamp(self.now-30,datetime.timezone.utc).isoformat())]
   self.assertTrue(M.executar().get('aguardando'));self.assertIsNotNone(self.store['pendente'])
+ def test_pendente_legado_deriva_o_worker_da_propria_chave(self):
+  # Estado real de 04/11: pendente verificar-2026-11-04-43abfdda995e gravado antes do contrato
+  # novo, sem worker_sha. A execucao despachada (head 43abfdda...) precisa ser reconhecida.
+  cheio='43abfdda995e' + 'a'*28
+  self.store={'versao':1,'acoes':{},'eventos':{},'diario':116,'dia':'2026-11-04','usados':1,'ultima_verificacao':self.now,
+              'pendente':{'chave':'verificar-2026-11-04-43abfdda995e','tipo':'verificar','em':self.now-60,'run':None,'attempt':1}}
+  self.sha='s0'
+  self.runs=[self.runmeta(id=1234,head_sha=cheio,created_at=datetime.datetime.fromtimestamp(self.now-30,datetime.timezone.utc).isoformat())]
+  r=M.executar();self.assertEqual(r.get('observado'),1234);self.assertIsNone(self.store['pendente'])
+  self.assertEqual(self.store['eventos'].get('resultado-verificar-2026-11-04-43abfdda995e'),'enviado')
+ def test_pendente_legado_ambiguo_nao_escolhe_worker_no_chute(self):
+  self.store={'versao':1,'acoes':{},'eventos':{},'diario':116,'dia':'2026-11-04','usados':1,'ultima_verificacao':self.now,
+              'pendente':{'chave':'verificar-2026-11-04-43abfdda995e','tipo':'verificar','em':self.now-60,'run':None,'attempt':1}}
+  self.sha='s0'
+  self.runs=[self.runmeta(id=1,head_sha='43abfdda995e'+'a'*28),self.runmeta(id=2,head_sha='43abfdda995e'+'b'*28)]
+  # Sem worker único, não escolhe no chute: apenas espera e deixa o prazo de 30 min decidir.
+  self.assertTrue(M.executar().get('aguardando'))
+  self.assertIsNotNone(self.store['pendente'])
+  self.assertNotIn('resultado-verificar-2026-11-04-43abfdda995e', self.store['eventos'])
 if __name__=='__main__':unittest.main()
