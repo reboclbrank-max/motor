@@ -14,6 +14,22 @@ class Componentes(unittest.TestCase):
   def dispatch(s):s['fase']='ci_aguardando';self.calls.append('dispatch');A.salvar(s)
   for target,name,kw in [(F,'politica',{'return_value':self.p}),(F,'protegido',{'side_effect':lambda p:contextlib.nullcontext()}),(A,'ler',{'side_effect':ler}),(A,'gravar',{'side_effect':gravar}),(A,'politica',{'return_value':{}}),(A,'preparar_pr',{'side_effect':preparar}),(A,'recuperar_pr',{}),(A,'despachar_ci',{'side_effect':dispatch}),(A,'integrar',{'side_effect':A.Aguardar('CI em andamento')}),(C,'gh',{'side_effect':AssertionError('rede inesperada')}),(C,'chamar_llm',{'side_effect':AssertionError('remoto proibido')})]:
    p=patch.object(target,name,**kw);p.start();self.addCleanup(p.stop)
+ def test_bloqueio_guarda_o_motivo_e_nao_a_classe(self):
+  with patch.object(A,'preparar_pr',side_effect=A.Revisao('Limite de reparos automáticos sem CI aprovada; nenhuma integração foi feita.')):
+   r=F.executar()
+  s=self.estado()
+  self.assertTrue(r.get('bloqueado'))
+  self.assertEqual(s['fase'],'bloqueado')
+  self.assertIn('Limite de reparos automáticos',s['motivo'])
+  self.assertNotEqual(s['motivo'],'Revisão necessária: Revisao')
+ def test_bloqueio_sem_mensagem_nao_fica_vazio(self):
+  with patch.object(A,'preparar_pr',side_effect=A.Revisao('   ')):
+   F.executar()
+  self.assertEqual(self.estado()['motivo'],'Revisão necessária: Revisao')
+ def test_bloqueio_corta_motivo_gigante(self):
+  with patch.object(A,'preparar_pr',side_effect=A.Revisao('x'*900)):
+   F.executar()
+  self.assertLessEqual(len(self.estado()['motivo']),len('Revisão necessária: ')+400)
  def estado(self):return next(v for k,v in self.db.items() if k.endswith('/estado.json'))
  def test_sem_objetivo_pontual_audita_componente_e_congela_contrato(self):
   r=F.executar();s=self.estado();self.assertTrue(r['aguardando']);self.assertEqual(s['aceite'],F.contrato());self.assertEqual(s['chamadas_modelo'],0);self.assertEqual(self.calls,['dispatch']);self.assertEqual(set(s['plano']['arquivos']),{'formatador.py','test_api.py'})

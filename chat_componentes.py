@@ -197,7 +197,11 @@ def executar():
   except Exception as e:
    # Checkpoints incertos de transporte não são apagados nem reexecutados às cegas.
    if not isinstance(e,(A.Revisao,ValueError,AssertionError)):raise
-   s['fase']='bloqueado';s['motivo']='Revisão necessária: '+type(e).__name__;A.salvar(s);return {'bloqueado':True,'id':ident}
+   # O motivo é a única coisa que o dono vai ler depois. Gravar a CLASSE da exceção
+   # ('Revisão necessária: Revisao') foi o que deixou o projeto 2ee41085 parado desde
+   # 02/11/2026 sem ninguém saber por quê. Mensagem primeiro; classe só como último recurso.
+   detalhe=(str(e).strip() or type(e).__name__)[:400]
+   s['fase']='bloqueado';s['motivo']='Revisão necessária: '+detalhe;A.salvar(s);return {'bloqueado':True,'id':ident}
 
 def arquivos(ativo):
  if ativo.get('alvo')!=ALVO or ativo.get('prefixo')!='PROJETOS/'+ALVO+'/' or ativo.get('contrato_sha256')!=S.digest(contrato()):raise A.Revisao('Manifesto não autorizado.')
