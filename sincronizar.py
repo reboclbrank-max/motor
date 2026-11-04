@@ -24,6 +24,9 @@ TOKEN = os.environ.get("PAT_MEMORIA", "").strip()
 PASTA = os.environ.get("PASTA_MEMORIA", "MEMORIA").strip() or "MEMORIA"
 RAMO = os.environ.get("RAMO_MEMORIA", "main").strip() or "main"
 MANIFESTO = ".memoria-sync.json"
+# Espera entre tentativas de leitura (teste zera para não dormir).
+ESPERA_BASE = 0.5
+ESPERA_MAX = 2.0
 TRAVA_LOCAL = ".memoria-sync.lock"
 # Cópias públicas distribuídas com o código, não memória produzida pelo runner.
 # A exceção exige nome E conteúdo exatos; nova versão requer revisão desta lista.
@@ -67,12 +70,15 @@ def _http(metodo, caminho, corpo=None):
                 texto = resposta.read().decode("utf-8")
             return json.loads(texto) if texto else None
         except urllib.error.HTTPError as erro:
-            if indice + 1 == tentativas or erro.code not in (429, 500, 502, 503, 504):
+            # 403 entra aqui porque o limite secundário do GitHub responde 403 (não 429) e, em
+            # rajada de 250 downloads, é exatamente ele que aparece. Se for falta de permissão
+            # de verdade, as três tentativas falham igual e o erro sobe como antes.
+            if indice + 1 == tentativas or erro.code not in (403, 429, 500, 502, 503, 504):
                 raise
         except (urllib.error.URLError, TimeoutError):
             if indice + 1 == tentativas:
                 raise
-        time.sleep(min(2, 0.5 * (2 ** indice)))
+        time.sleep(min(ESPERA_MAX, ESPERA_BASE * (2 ** indice)))
 
 
 def _sha(conteudo):
@@ -186,7 +192,11 @@ def _baixar_sem_trava():
             base[caminho] = sha
         except Exception as e:
             erros += 1
-            log("falha ao baixar arquivo:", _motivo_seguro(e))
+            # Antes saía só o tipo da exceção ("HTTPError"), sem caminho nem código: foi o que
+            # deixou o laudo de 03/11 em aberto. Agora o arquivo e o status aparecem, sem conteúdo.
+            codigo = getattr(e, "code", None)
+            log("falha ao baixar arquivo:", _motivo_seguro(e),
+                "->", caminho, ("HTTP %s" % codigo) if codigo else "(sem código)")
     # Sem base completa, um passo always() não deve enviar arquivos órfãos/antigos.
     if not erros:
         try:
