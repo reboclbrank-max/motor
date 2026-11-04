@@ -27,6 +27,13 @@ on:
   repository_dispatch:
     types: [mensagem]
   # Rede de segurança: pega o que o evento instantâneo perder.
+  # MEDIDO EM 04/11/2026 (48 h, só `event == 'schedule'`): este cron pede 288 execuções e
+  # recebeu 7 (2%). E nas 6 últimas varreduras o resultado foi "nenhuma mensagem executável
+  # pendente do dono": a rede nunca pegou nada que o dispatch tivesse perdido. O tráfego real
+  # deste motor vem de `repository_dispatch` (11 em 48 h) — o relógio do GitHub não entrega
+  # `*/10`, e enquanto isso cada varredura custa ~7 min de runner, 22 suítes e 253 GETs de
+  # memória no repositório privado (a mesma rajada que causou o 403 do `batente`).
+  # Não troque este número achando que ganha cadência: abaixo de 1 h o agendador não promete.
   schedule:
     - cron: '*/10 * * * *'
   workflow_dispatch:

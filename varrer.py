@@ -323,14 +323,18 @@ def main(processar_um=None, disparar=None):
     if processar_um is None and disparar is None and os.environ.get('GITHUB_ACTIONS')=='true':
         try:
             import agenda_manutencao
-            agenda_manutencao.executar()
+            resultado = agenda_manutencao.executar()
+            if isinstance(resultado, dict) and resultado.get('ativo') is False:
+                log('agenda de manutenção desligada por política privada (ausente ou ativo=false)')
         except Exception as e:
             # Sem dados privados no log; falha da agenda não concede poderes nem derruba o Chat.
             log(linha_de_bloqueio('agenda de manutenção', e))
     if processar_um is None and disparar is None and os.environ.get('GITHUB_ACTIONS')=='true':
         try:
             import chat_componentes
-            chat_componentes.executar()
+            resultado = chat_componentes.executar()
+            if isinstance(resultado, dict) and resultado.get('ativo') is False:
+                log('autoaperfeiçoamento desligado por política privada (ausente ou ativo=false)')
         except Exception as e:
             log(linha_de_bloqueio('autoaperfeiçoamento', e))
     processar_um = processar_um or processar
