@@ -72,8 +72,14 @@ def esperado_por_dia(cron):
     return por_dia
 
 
-def julgar(esperado, entregue, horas):
-    """(taxa, veredito). Veredito é do mais grave para o menos grave."""
+def julgar(esperado, entregue, horas, total=None):
+    """(taxa, veredito). Veredito é do mais grave para o menos grave.
+
+    `total` (qualquer evento) importa: cron faminto com serviço alimentado por dispatch não é
+    a mesma emergência que cron faminto e nada rodando. Medido em 04/11: `motor/chat` entrega
+    2% do cron e recebe dezenas de dispatch por dia — o serviço está vivo, a promessa do cron é
+    que é ficção. Sem essa coluna, o painel mandava consertar o que não estava quebrado.
+    """
     previsto = esperado * horas / 24.0
     if previsto <= 0:
         return None, "sem cron"
@@ -85,8 +91,12 @@ def julgar(esperado, entregue, horas):
         return None, "sem amostra"
     taxa = entregue / previsto
     if entregue == 0:
+        if total is not None and total > 0:
+            return taxa, "cron mudo; serviço alimentado por dispatch"
         return taxa, "morto"
     if taxa < 0.5:
+        if total is not None and total >= previsto:
+            return taxa, "cron faminto; serviço coberto por dispatch"
         return taxa, "faminto"
     if taxa < 0.9:
         return taxa, "atrasado"
@@ -112,9 +122,10 @@ def crons_do_workflow(repo, nome_arquivo, token):
         return []
 
 
-def conta_agendadas(repo, workflow_id, horas, token):
+def conta_runs(repo, workflow_id, horas, token):
+    """(agendadas, total) na janela. `total` inclui dispatch: distingue cron-ficção de serviço morto."""
     corte = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=horas)
-    total, pagina = 0, 1
+    agendadas, total, pagina = 0, 0, 1
     while pagina <= 5:
         try:
             dados = _get(f"/repos/{DONO}/{repo}/actions/workflows/{workflow_id}/runs?per_page=100&page={pagina}", token)
@@ -125,13 +136,15 @@ def conta_agendadas(repo, workflow_id, horas, token):
             break
         for run in runs:
             quando = datetime.datetime.fromisoformat(run["created_at"].replace("Z", "+00:00"))
-            if quando >= corte and run.get("event") == "schedule":
+            if quando >= corte:
                 total += 1
+                if run.get("event") == "schedule":
+                    agendadas += 1
         mais_antigo = datetime.datetime.fromisoformat(runs[-1]["created_at"].replace("Z", "+00:00"))
         if mais_antigo < corte:
             break
         pagina += 1
-    return total
+    return agendadas, total
 
 
 def medir(repos, horas, token):
@@ -151,29 +164,34 @@ def medir(repos, horas, token):
             esperado = sum(e for e in (esperado_por_dia(c) for c in crons) if e)
             if not esperado:
                 continue
-            entregue = conta_agendadas(repo, wf["id"], horas, token)
-            if entregue is None:
+            contagem = conta_runs(repo, wf["id"], horas, token)
+            if contagem is None:
                 continue
-            taxa, veredito = julgar(esperado, entregue, horas)
+            entregue, total = contagem
+            taxa, veredito = julgar(esperado, entregue, horas, total=total)
             linhas.append({"repo": repo, "workflow": wf["name"], "crons": crons,
-                           "esperado": esperado, "entregue": entregue,
+                           "esperado": esperado, "entregue": entregue, "total": total,
                            "taxa": taxa, "veredito": veredito})
     return sorted(linhas, key=lambda x: (x["taxa"] if x["taxa"] is not None else 9))
 
 
 def imprimir(linhas, horas):
     print(f"entrega do agendador nas últimas {horas} h")
-    print(f"{'repo':<8}{'workflow':<34}{'pede/dia':>9}{'previsto':>9}{'entregue':>9}{'taxa':>7}  veredito")
+    print(f"{'repo':<8}{'workflow':<34}{'pede/dia':>9}{'previsto':>9}{'agendado':>9}{'total':>7}{'taxa':>7}  veredito")
     for l in linhas:
         previsto = l["esperado"] * horas / 24.0
         taxa = "?" if l["taxa"] is None else f"{100 * l['taxa']:.0f}%"
-        print(f"{l['repo']:<8}{l['workflow'][:33]:<34}{l['esperado']:>9.1f}{previsto:>9.1f}{l['entregue']:>9}{taxa:>7}  {l['veredito']}")
+        print(f"{l['repo']:<8}{l['workflow'][:33]:<34}{l['esperado']:>9.1f}{previsto:>9.1f}{l['entregue']:>9}{l.get('total', 0):>7}{taxa:>7}  {l['veredito']}")
     famintos = [l for l in linhas if l["veredito"] in ("faminto", "morto")]
+    cobertos = [l for l in linhas if l["veredito"].endswith("por dispatch")]
     julgaveis = [l for l in linhas if l["veredito"] != "sem amostra"]
     print()
     print(f"{len(famintos)} de {len(julgaveis)} workflows agendados com janela suficiente recebem menos da metade do que pedem.")
-    if len(linhas) > len(julgaveis):
-        print(f"{len(linhas) - len(julgaveis)} ficaram sem amostra (cron semanal/mensal numa janela curta) e não entram na conta.")
+    if cobertos:
+        print(f"{len(cobertos)} desses são só ficção de cron: o serviço roda por dispatch e está alimentado.")
+    sem_amostra = len(linhas) - len(julgaveis)
+    if sem_amostra:
+        print(f"sem amostra: {sem_amostra} (cron semanal/mensal numa janela curta) — fora da conta.")
     if famintos:
         print("Regra da casa: cron curto não é promessa. Quem precisa de cadência abaixo de 1 h "
               "depende de encadeamento ou de dispatch, não do relógio do GitHub.")
