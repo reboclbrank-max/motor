@@ -92,7 +92,13 @@ def executar():
   if len(matches)>1 and not pend.get('run'):raise A.Revisao('Mais de uma execução na janela; não inventar correlação.')
   r=matches[0] if matches else None
   if r is None or int(r.get('run_attempt',1))<pend.get('attempt',1):
-   if now-pend['em']>1800:registrar(s,p,'incerto-'+pend['chave'],'Envio sem execução confirmada após30min. Não repeti o efeito; requer conferência.')
+   if now-pend['em']>1800:
+    registrar(s,p,'incerto-'+pend['chave'],'Envio sem execução confirmada após30min. Não repeti o efeito; requer conferência.')
+    # O aviso já está registrado e a execução não vai mais aparecer (ex.: pin do worker trocado,
+    # que muda o head_sha aceito por `permitido`). Sem isto o pendente fica órfão e a agenda
+    # responde "aguardando" para sempre, nunca mais escolhendo prioridade. Encerrar não repete efeito.
+    if s.get('eventos',{}).get('incerto-'+pend['chave'])=='enviado':
+     s['pendente']=None;salvar(s,p);return {'incerto_encerrado':pend['chave']}
    return {'aguardando':True,'incerto':r is None}
   if r['status']!='completed':return {'aguardando':True,'run':r['id']}
   registrar(s,p,'resultado-'+pend['chave'],'Execução técnica '+str(r['id'])+' terminou '+str(r.get('conclusion'))+'. Evidência: https://github.com/'+C.REPO_ROBO+'/actions/runs/'+str(r['id'])+'. Não equivale a correção semântica universal.')
