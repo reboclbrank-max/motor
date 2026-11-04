@@ -15,6 +15,7 @@ import stat
 import sys
 import tempfile
 import time
+import http.client
 import urllib.request
 import urllib.error
 
@@ -75,7 +76,10 @@ def _http(metodo, caminho, corpo=None):
             # de verdade, as três tentativas falham igual e o erro sobe como antes.
             if indice + 1 == tentativas or erro.code not in (403, 429, 500, 502, 503, 504):
                 raise
-        except (urllib.error.URLError, TimeoutError):
+        except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.HTTPException):
+            # Queda no meio da resposta chega como RemoteDisconnected/IncompleteRead, que NÃO são
+            # URLError: em 04/11 um único RemoteDisconnected em 254 arquivos derrubou o banco da
+            # casa e o espelho da memória (runs 41819338210 e 41845953050). Repetir GET é seguro.
             if indice + 1 == tentativas:
                 raise
         time.sleep(min(ESPERA_MAX, ESPERA_BASE * (2 ** indice)))
