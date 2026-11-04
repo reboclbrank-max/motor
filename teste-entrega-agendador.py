@@ -75,5 +75,23 @@ class ContaDeCampos(unittest.TestCase):
         self.assertEqual(E.conta_campo("10-12", 24), 3)
 
 
+class JulgarJanelaCurta(unittest.TestCase):
+    """Zero execução só é 'morto' quando a janela comportava pelo menos uma."""
+
+    def test_semanal_sem_amostra_nao_e_morte(self):
+        self.assertEqual(E.julgar(1 / 7.0, 0, 48), (None, "sem amostra"))
+
+    def test_semanal_que_rodou_uma_vez_esta_no_prazo(self):
+        taxa, veredito = E.julgar(1 / 7.0, 1, 48)
+        self.assertEqual(veredito, "no prazo")
+        self.assertGreater(taxa, 1)
+
+    def test_zero_em_janela_larga_continua_morto(self):
+        self.assertEqual(E.julgar(144, 0, 48)[1], "morto")
+
+    def test_uma_esperada_por_janela_ja_julga(self):
+        self.assertEqual(E.julgar(0.75, 0, 48)[1], "morto")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
