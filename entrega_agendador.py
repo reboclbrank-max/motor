@@ -77,6 +77,12 @@ def julgar(esperado, entregue, horas):
     previsto = esperado * horas / 24.0
     if previsto <= 0:
         return None, "sem cron"
+    if entregue == 0 and previsto < 1:
+        # Semanais/mensais: numa janela menor que uma execução esperada, zero execuções
+        # não distingue "morto" de "ainda não chegou a vez". Chamar isso de morto foi
+        # erro medido em 04/11/2026 (`relatorio-semanal` roda todo domingo e apareceu
+        # como 0% morto numa janela de 48 h).
+        return None, "sem amostra"
     taxa = entregue / previsto
     if entregue == 0:
         return taxa, "morto"
@@ -163,8 +169,11 @@ def imprimir(linhas, horas):
         taxa = "?" if l["taxa"] is None else f"{100 * l['taxa']:.0f}%"
         print(f"{l['repo']:<8}{l['workflow'][:33]:<34}{l['esperado']:>9.1f}{previsto:>9.1f}{l['entregue']:>9}{taxa:>7}  {l['veredito']}")
     famintos = [l for l in linhas if l["veredito"] in ("faminto", "morto")]
+    julgaveis = [l for l in linhas if l["veredito"] != "sem amostra"]
     print()
-    print(f"{len(famintos)} de {len(linhas)} workflows agendados recebem menos da metade do que pedem.")
+    print(f"{len(famintos)} de {len(julgaveis)} workflows agendados com janela suficiente recebem menos da metade do que pedem.")
+    if len(linhas) > len(julgaveis):
+        print(f"{len(linhas) - len(julgaveis)} ficaram sem amostra (cron semanal/mensal numa janela curta) e não entram na conta.")
     if famintos:
         print("Regra da casa: cron curto não é promessa. Quem precisa de cadência abaixo de 1 h "
               "depende de encadeamento ou de dispatch, não do relógio do GitHub.")

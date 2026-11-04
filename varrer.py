@@ -16,6 +16,7 @@ REGRAS (não regredir):
 import datetime
 import json
 import os
+import re
 import sys
 import tempfile
 import time
@@ -271,6 +272,32 @@ def processar(issue, comentario):
                 os.environ[nome] = valor
 
 
+SEGREDO = re.compile(r'(?i)(gh[pousr]_[A-Za-z0-9]{15,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9]{15,}|-----BEGIN [^-]*PRIVATE KEY)')
+
+
+def eh_pausa_por_revisao(e):
+    """`A.Revisao` é freio de desenho, não defeito: a agenda parou porque algo mudou.
+
+    Antes, o log dizia "indisponível: Revisao" — que se lê como bug e esconde o motivo
+    real (pin do worker mudou, política incompatível, main andou). O dono precisa saber
+    que basta re-apontar o pin, não que a agenda está quebrada.
+    """
+    try:
+        import autonomia_reversivel as A
+        return isinstance(e, A.Revisao)
+    except Exception:  # noqa: BLE001 - sem o módulo, cai no nome da classe
+        return type(e).__name__ == 'Revisao'
+
+
+def linha_de_bloqueio(nome, e):
+    """Linha de log do log PÚBLICO: motivo curto, sem segredo e sem dado privado."""
+    if not eh_pausa_por_revisao(e):
+        # Erro de verdade: só a classe, nunca o texto (pode carregar dado privado).
+        return f'{nome} indisponível: {type(e).__name__}'
+    texto = SEGREDO.sub('[omitido]', str(e)).strip()
+    return f'{nome} pausada por revisão: {(texto[:120] or "sem motivo declarado")}'
+
+
 def acordar_de_novo(motivo="fila"):
     """Pede ao GitHub outra rodada do chat. Devolve True se o pedido saiu.
 
@@ -299,13 +326,13 @@ def main(processar_um=None, disparar=None):
             agenda_manutencao.executar()
         except Exception as e:
             # Sem dados privados no log; falha da agenda não concede poderes nem derruba o Chat.
-            log('agenda de manutenção indisponível: '+type(e).__name__)
+            log(linha_de_bloqueio('agenda de manutenção', e))
     if processar_um is None and disparar is None and os.environ.get('GITHUB_ACTIONS')=='true':
         try:
             import chat_componentes
             chat_componentes.executar()
         except Exception as e:
-            log('autoaperfeiçoamento indisponível: '+type(e).__name__)
+            log(linha_de_bloqueio('autoaperfeiçoamento', e))
     processar_um = processar_um or processar
     disparar = disparar or acordar_de_novo
     diagnostico = {}
