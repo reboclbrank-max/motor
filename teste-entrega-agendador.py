@@ -93,5 +93,27 @@ class JulgarJanelaCurta(unittest.TestCase):
         self.assertEqual(E.julgar(0.75, 0, 48)[1], "morto")
 
 
+class JulgarComDispatch(unittest.TestCase):
+    """Cron mudo com serviço alimentado por dispatch não é a mesma emergência que morto."""
+
+    def test_cron_faminto_coberto_por_dispatch(self):
+        taxa, veredito = E.julgar(144, 7, 48, total=300)
+        self.assertLess(taxa, 0.5)
+        self.assertEqual(veredito, "cron faminto; serviço coberto por dispatch")
+
+    def test_cron_faminto_sem_dispatch_continua_faminto(self):
+        self.assertEqual(E.julgar(144, 7, 48, total=7)[1], "faminto")
+
+    def test_cron_mudo_com_algum_dispatch(self):
+        self.assertEqual(E.julgar(144, 0, 48, total=30)[1], "cron mudo; serviço alimentado por dispatch")
+
+    def test_sem_total_informado_o_veredito_antigo_permanece(self):
+        self.assertEqual(E.julgar(144, 7, 48)[1], "faminto")
+        self.assertEqual(E.julgar(144, 0, 48)[1], "morto")
+
+    def test_no_prazo_nao_muda_com_dispatch(self):
+        self.assertEqual(E.julgar(2, 4, 48, total=9)[1], "no prazo")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
