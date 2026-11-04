@@ -80,4 +80,28 @@ class Agenda(unittest.TestCase):
   with patch.object(M,'politica',side_effect=[self.p,dict(self.p,ativo=False)]):
    with self.assertRaises(A.Revisao):M.executar()
   self.assertFalse(self.effects)
+ def pendente(self,segundos=3600,evento=False,chave='verificar-2026-11-03-6bbe61da033d'):
+  self.store={'versao':1,'acoes':{},'eventos':{},'diario':116,'dia':'2026-11-03','usados':1,'ultima_verificacao':self.now,'pendente':{'chave':chave,'tipo':'verificar','em':self.now-segundos,'run':None,'attempt':1}}
+  if evento:self.store['eventos']['incerto-'+chave]='enviado'
+  self.sha='s0'
+ def test_pendente_orfao_de_pin_antigo_e_encerrado_em_vez_de_travar(self):
+  # Medido em 04/11/2026: re-apontado o pin, o pendente do pin antigo nunca mais casa com
+  # `permitido` (head_sha diferente) e a agenda respondia "aguardando" para sempre.
+  self.pendente(evento=True);n=len(self.effects);w=self.writes
+  r=M.executar();self.assertIn('incerto_encerrado',r);self.assertIsNone(self.store['pendente'])
+  self.assertEqual(len(self.effects),n)
+  self.assertEqual(sum('/dispatches' in x[0] or '/rerun-failed-jobs' in x[0] for x in self.effects),0)
+  self.assertGreater(self.writes,w)
+ def test_pendente_vencido_registra_incerto_uma_vez_e_encerra(self):
+  self.pendente();M.executar()
+  self.assertEqual(sum('/comments' in x[0] for x in self.effects),1)
+  self.assertIsNone(self.store['pendente']);self.assertEqual(self.store['eventos']['incerto-verificar-2026-11-03-6bbe61da033d'],'enviado')
+  self.assertEqual(sum('/dispatches' in x[0] or '/rerun-failed-jobs' in x[0] for x in self.effects),0)
+  n=len(self.effects);M.executar();self.assertEqual(sum('/comments' in x[0] for x in self.effects),1);self.assertLessEqual(len(self.effects),n+1)
+ def test_pendente_recente_ainda_espera_sem_encerrar(self):
+  self.pendente(segundos=60);n=len(self.effects)
+  self.assertTrue(M.executar()['aguardando']);self.assertIsNotNone(self.store['pendente']);self.assertEqual(len(self.effects),n)
+ def test_encerrada_a_pendencia_a_agenda_volta_a_escolher_prioridade(self):
+  self.pendente(evento=True);M.executar()
+  self.runs=[self.runmeta(conclusion='failure')];self.assertEqual(M.executar()['acao'],'retomar')
 if __name__=='__main__':unittest.main()
